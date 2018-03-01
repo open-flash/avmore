@@ -4,11 +4,13 @@ extern crate swf_tree;
 
 use avmore::context::Context;
 use avmore::avm1::ExecutionContext;
+use avmore::host::NativeHost;
 
 use swf_tree::avm1 as avm1_tree;
 
 fn main() {
-  let ctx = Context::new(11);
+  let host: NativeHost = NativeHost();
+  let ctx = Context::new(11, &host);
   let mut ectx = ExecutionContext::new(&ctx);
 
   let actions: Vec<avm1_tree::Action> = vec![

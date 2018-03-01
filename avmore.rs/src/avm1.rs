@@ -22,7 +22,7 @@ impl<'a> Stack<'a> {
 }
 
 pub struct ExecutionContext<'a> {
-  context: &'a Context,
+  context: &'a Context<'a>,
   stack: Stack<'a>,
 }
 
@@ -78,36 +78,24 @@ impl<'a> ExecutionContext<'a> {
   /// Implements the add operation as defined in ECMA-262-3, section 11.6.1
   /// ("The Addition operator ( + )")
   fn exec_add2(&mut self) -> () {
-//    let mut stack = vec![
-//      AvmValue::Undefined(AvmUndefined()),
-//      AvmValue::Undefined(AvmUndefined()),
-//    ];
-
     let right = self.stack.pop();
     let left = self.stack.pop();
     let left = to_primitive(left, None);
     let right = to_primitive(right, None);
-//    match (left, right) {
-//      (AvmValue::String(_), _) | (_, AvmValue::String(_)) => {
-//        unimplemented!()
-////        let left = left.to_avm_string(&self.context.scope, self.context.swf_version);
-////        let right = right.to_avm_string(&self.context.scope, self.context.swf_version);
-////        let result = format!("{}{}", left.to_str(), right.to_str());
-////        self.stack.push(AvmValue::String(AvmString::new(&self.context.scope, &result)));
-//      },
-//      _ => {
+    match (left, right) {
+      (left @ AvmValue::String(_), right) | (left, right @ AvmValue::String(_)) => {
+        let left = left.to_avm_string(&self.context.scope, self.context.swf_version);
+        let right = right.to_avm_string(&self.context.scope, self.context.swf_version);
+        let result = format!("{}{}", left.to_str(), right.to_str());
+        self.stack.push(AvmValue::String(AvmString::new(&self.context.scope, &result)));
+      },
+      (left, right) => {
         let left = to_number(&self.context.scope, left);
         let right = to_number(&self.context.scope, right);
         let result = left.to_f64() + right.to_f64();
         self.stack.push(AvmValue::Number(AvmNumber::new(&self.context.scope, result)));
-//      }
-//    }
-//
-//    match (left, right) {
-//      (AvmValue::String(_), _) => unimplemented!(),
-//      (_, AvmValue::String(_)) => unimplemented!(),
-//      _ => unimplemented!()
-//    }
+      }
+    }
   }
 
   fn exec_push(&mut self, push: &avm1::actions::Push) -> () {
