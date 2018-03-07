@@ -4,7 +4,11 @@ pub trait Host {
   fn trace(&self, message: &str);
 }
 
-pub struct NativeHost();
+pub struct NativeHost;
+
+impl NativeHost {
+  pub fn new() -> NativeHost { NativeHost }
+}
 
 impl Host for NativeHost {
   fn trace(&self, message: &str) {
@@ -12,10 +16,10 @@ impl Host for NativeHost {
   }
 }
 
-pub struct NoOpHost();
+pub struct NoOpHost;
 
 impl Host for NoOpHost {
-  fn trace(&self, message: &str) {}
+  fn trace(&self, _message: &str) {}
 }
 
 pub struct LoggedHost {
