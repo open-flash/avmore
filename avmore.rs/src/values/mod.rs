@@ -6,17 +6,18 @@ use swf_tree::avm1;
 mod object;
 mod string;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct AvmUndefined;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct AvmNull;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct AvmNumber(f64);
 
 impl AvmNumber {
   pub fn new(value: f64) -> AvmNumber {
+    // TODO: How to deal with `-0`? I think that I remember that it is normalized to `+0`
     AvmNumber(value)
   }
 
@@ -73,6 +74,14 @@ unsafe impl<'gc> Trace for AvmValue<'gc> {
 }
 
 impl<'gc> AvmValue<'gc> {
+  pub fn legacy_boolean(value: bool, swf_version: u8) -> AvmValue<'gc> {
+    if swf_version < 5 {
+      AvmValue::Number(AvmNumber::new(if value { 1f64 } else { 0f64 }))
+    } else {
+      AvmValue::Boolean(AvmBoolean::new(value))
+    }
+  }
+
   pub fn from_ast(gc_scope: &'gc GcScope<'gc>, value: &avm1::actions::Value) -> Result<AvmValue<'gc>, GcAllocErr> {
     match value {
       &avm1::actions::Value::CString(ref s) => AvmString::new(gc_scope, s.clone())
@@ -90,6 +99,32 @@ impl<'gc> AvmValue<'gc> {
       &AvmValue::String(ref avm_string) => Ok(Gc::clone(&avm_string)),
       &AvmValue::Number(ref avm_number) => AvmString::new(gc_scope, format!("{}", avm_number.value())),
       _ => unimplemented!(),
+    }
+  }
+
+  /// Converts the current value to an `AvmNumber` using ES3 rules.
+  ///
+  /// The conversion follows ES-262-3 section 9.3 ("ToNumber")
+  pub fn to_avm_number(&self) -> AvmNumber {
+    match self {
+      &AvmValue::Undefined(_) => AvmNumber::new(::std::f64::NAN),
+      &AvmValue::Null(_) => AvmNumber::new(0f64),
+      &AvmValue::Boolean(_) => unimplemented!(),
+      &AvmValue::Number(avm_number) => avm_number,
+      &AvmValue::String(_) => unimplemented!(),
+      &AvmValue::Object(_) => unimplemented!(),
+    }
+  }
+
+  /// Converts the current value to an `AvmNumber` using legacy rules.
+  ///
+  /// `AvmNumber` are returned as-is, other types return `AvmNumber::new(0f64)`.
+  ///
+  /// TODO: Check how strings are handled (parseFloat?)
+  pub fn legacy_to_avm_number(&self) -> AvmNumber {
+    match self {
+      &AvmValue::Number(avm_number) => avm_number,
+      _ => AvmNumber::new(0f64),
     }
   }
 }
