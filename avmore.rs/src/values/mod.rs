@@ -1,4 +1,4 @@
-use gc::{Gc, GcAllocErr, GcRootScope};
+use ::scoped_gc::{Gc, GcAllocErr, GcRefCell, GcScope, Trace};
 pub use self::object::AvmObject;
 pub use self::string::AvmString;
 use swf_tree::avm1;
@@ -6,13 +6,13 @@ use swf_tree::avm1;
 mod object;
 mod string;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AvmUndefined;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AvmNull;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AvmNumber(f64);
 
 impl AvmNumber {
@@ -25,7 +25,7 @@ impl AvmNumber {
   }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AvmBoolean(bool);
 
 impl AvmBoolean {
@@ -38,13 +38,13 @@ impl AvmBoolean {
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AvmValue<'gc> {
   Boolean(AvmBoolean),
   Undefined(AvmUndefined),
   Null(AvmNull),
   Number(AvmNumber),
-  Object,
+  Object(Gc<'gc, GcRefCell<AvmObject<'gc>>>),
   String(Gc<'gc, AvmString>),
 }
 
@@ -59,13 +59,21 @@ impl<'gc> PartialEq for AvmValue<'gc> {
     }
   }
 
-  fn ne(&self, other: &AvmValue) -> bool {
+  fn ne(&self, other: &AvmValue<'gc>) -> bool {
     !self.eq(other)
   }
 }
 
+unsafe impl<'gc> Trace for AvmValue<'gc> {
+  unsafe fn mark(&self) {}
+
+  unsafe fn root(&self) {}
+
+  unsafe fn unroot(&self) {}
+}
+
 impl<'gc> AvmValue<'gc> {
-  pub fn from_ast(gc_scope: &'gc GcRootScope, value: &avm1::actions::Value) -> Result<AvmValue<'gc>, GcAllocErr> {
+  pub fn from_ast(gc_scope: &'gc GcScope<'gc>, value: &avm1::actions::Value) -> Result<AvmValue<'gc>, GcAllocErr> {
     match value {
       &avm1::actions::Value::CString(ref s) => AvmString::new(gc_scope, s.clone())
         .map(|avm_string| AvmValue::String(avm_string)),
@@ -75,7 +83,7 @@ impl<'gc> AvmValue<'gc> {
     }
   }
 
-  pub fn to_avm_string(&self, gc_scope: &'gc GcRootScope, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+  pub fn to_avm_string(&self, gc_scope: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
     match self {
       &AvmValue::Undefined(_) => AvmString::new(gc_scope, String::from(if swf_version >= 7 { "undefined" } else { "" })),
       &AvmValue::Null(_) => AvmString::new(gc_scope, String::from("null")),

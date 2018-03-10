@@ -1,22 +1,14 @@
-use gc::{Gc, GcAllocErr, GcRootScope, Trace};
+use ::scoped_gc::{Gc, GcAllocErr, GcScope};
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Trace)]
 pub struct AvmString(String);
 
 impl AvmString {
-  pub fn new<'r, 's: 'r, 'gc: 's>(gc_scope: &'s GcRootScope<'gc>, value: String) -> Result<Gc<'r, AvmString>, GcAllocErr> {
+  pub fn new<'gc>(gc_scope: &'gc GcScope<'gc>, value: String) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
     gc_scope.alloc(AvmString(value))
   }
 
   pub fn value(&self) -> &str {
     &self.0
   }
-}
-
-impl Trace for AvmString {
-  fn trace(&self) {}
-
-  fn root(&self) {}
-
-  fn unroot(&self) {}
 }

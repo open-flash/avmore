@@ -1,19 +1,19 @@
 use ::std::collections::hash_map::HashMap;
-use gc::GcRootScope;
+use ::scoped_gc::GcScope;
 use host::Host;
 use swf_tree::avm1 as avm1_tree;
 use values::AvmValue;
 
-pub struct Context<'gc, 'gcstatic: 'gc> {
+pub struct Context<'gc> {
   pub swf_version: u8,
-  pub globals: HashMap<String, AvmValue<'gc>>,
   // TEMPORARY
+  pub globals: HashMap<String, AvmValue<'gc>>,
   pub host: &'gc Host,
-  pub gc_scope: &'gc GcRootScope<'gcstatic>,
+  pub gc_scope: &'gc GcScope<'gc>,
 }
 
-impl<'gc, 'gcstatic: 'gc> Context<'gc, 'gcstatic> {
-  pub fn new(host: &'gc Host, gc_scope: &'gc GcRootScope<'gcstatic>, swf_version: u8) -> Context<'gc, 'gcstatic> {
+impl<'gc> Context<'gc> {
+  pub fn new(host: &'gc Host, gc_scope: &'gc GcScope<'gc>, swf_version: u8) -> Context<'gc> {
     Context {
       swf_version,
       globals: HashMap::new(),
