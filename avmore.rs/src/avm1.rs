@@ -1,7 +1,9 @@
-use ::scoped_gc::{Gc, GcRefCell};
 use ::std::usize;
-use context::Context;
+
+use ::scoped_gc::{Gc, GcRefCell};
 use swf_tree::avm1;
+
+use context::Context;
 use values::{AvmNumber, AvmObject, AvmString, AvmUndefined, AvmValue};
 
 struct Stack<'gc> (Vec<AvmValue<'gc>>);
@@ -73,8 +75,13 @@ impl<'a, 'gc: 'a> ExecutionContext<'a, 'gc> {
       &avm1::Action::InitObject => self.exec_init_object(),
       &avm1::Action::Less => self.exec_less(),
       &avm1::Action::Multiply => self.exec_multiply(),
+      &avm1::Action::Not => self.exec_not(),
+      &avm1::Action::Or => self.exec_or(),
       &avm1::Action::Pop => self.exec_pop(),
       &avm1::Action::Push(ref push) => self.exec_push(push),
+      &avm1::Action::StringAdd => self.exec_string_add(),
+      &avm1::Action::StringEquals => self.exec_string_equals(),
+      &avm1::Action::StringLength => self.exec_string_length(),
       &avm1::Action::Subtract => self.exec_subtract(),
       &avm1::Action::Trace => self.exec_trace(),
       _ => unimplemented!(),
@@ -169,6 +176,17 @@ impl<'a, 'gc: 'a> ExecutionContext<'a, 'gc> {
     self.stack.push(AvmValue::Number(AvmNumber::new(left * right)));
   }
 
+  fn exec_not(&mut self) -> () {
+    let value = self.stack.pop().legacy_to_avm_number().value();
+    self.stack.push(AvmValue::legacy_boolean(value == 0f64, self.context.swf_version));
+  }
+
+  fn exec_or(&mut self) -> () {
+    let right = self.stack.pop().legacy_to_avm_number().value();
+    let left = self.stack.pop().legacy_to_avm_number().value();
+    self.stack.push(AvmValue::legacy_boolean(left != 0f64 || right != 0f64, self.context.swf_version));
+  }
+
   pub fn exec_pop(&mut self) -> () {
     self.stack.pop();
   }
@@ -179,15 +197,36 @@ impl<'a, 'gc: 'a> ExecutionContext<'a, 'gc> {
     }
   }
 
+  fn exec_string_add(&mut self) -> () {
+    let right = self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value().to_string();
+    let left = self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value().to_string();
+    self.stack.push(AvmValue::string(self.context.gc_scope, format!("{}{}", left, right)).unwrap());
+  }
+
+  fn exec_string_equals(&mut self) -> () {
+    let right = self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value().to_string();
+    let left = self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value().to_string();
+    let result = left == right;
+    self.stack.push(AvmValue::legacy_boolean(result, self.context.swf_version));
+  }
+
+  fn exec_string_length(&mut self) -> () {
+    let value = self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value().to_string();
+    // TODO: Checked conversion
+    self.stack.push(AvmValue::number(value.len() as f64));
+  }
+
   fn exec_subtract(&mut self) -> () {
     let right = self.stack.pop().legacy_to_avm_number().value();
     let left = self.stack.pop().legacy_to_avm_number().value();
-    self.stack.push(AvmValue::Number(AvmNumber::new(left - right)))
+    self.stack.push(AvmValue::number(left - right))
   }
 
   fn exec_trace(&mut self) -> () {
-    self.context.trace(
-      self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value()
-    )
+    // `undefined` is always `undefined` when passed to `trace`, even for swf_version < 7.
+    match self.stack.pop() {
+      AvmValue::Undefined(_) => self.context.trace("undefined"),
+      avm_value => self.context.trace(avm_value.to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value()),
+    };
   }
 }

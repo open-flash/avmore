@@ -19,8 +19,8 @@ name = "avmore"
 path = "src/main.rs"
 
 [dependencies]
-scoped-gc = "^0.1.1"
-scoped-gc-derive = "^0.1.1"
+scoped-gc = "^0.1.3"
+scoped-gc-derive = "^0.1.3"
 swf-tree = "^0.0.10"
 swf-parser = "^0.0.2"
 

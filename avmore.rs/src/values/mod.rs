@@ -82,6 +82,14 @@ impl<'gc> AvmValue<'gc> {
     }
   }
 
+  pub fn string(gc_scope: &'gc GcScope<'gc>, value: String) -> Result<AvmValue<'gc>, GcAllocErr> {
+    AvmString::new(gc_scope, value).map(|s| AvmValue::String(s))
+  }
+
+  pub fn number(value: f64) -> AvmValue<'gc> {
+    AvmValue::Number(AvmNumber::new(value))
+  }
+
   pub fn from_ast(gc_scope: &'gc GcScope<'gc>, value: &avm1::actions::Value) -> Result<AvmValue<'gc>, GcAllocErr> {
     match value {
       &avm1::actions::Value::CString(ref s) => AvmString::new(gc_scope, s.clone())
