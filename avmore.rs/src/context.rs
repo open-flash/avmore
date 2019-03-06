@@ -1,7 +1,7 @@
 use ::std::collections::hash_map::HashMap;
 use ::scoped_gc::GcScope;
-use host::Host;
-use swf_tree::avm1 as avm1_tree;
+use crate::host::Host;
+use avm1_tree;
 use values::AvmValue;
 
 pub struct Context<'gc> {
@@ -27,7 +27,7 @@ impl<'gc> Context<'gc> {
   }
 
   pub fn set_var(&mut self, key: String, value: String) {
-    self.globals.insert(key, AvmValue::from_ast(self.gc_scope, &avm1_tree::actions::Value::CString(value)).unwrap());
+    self.globals.insert(key, AvmValue::from_ast(self.gc_scope, &avm1_tree::Value::String(value)).unwrap());
   }
 
   pub fn get_var(&mut self, key: String) -> &AvmValue<'gc> {

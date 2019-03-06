@@ -1,7 +1,7 @@
 use ::scoped_gc::{Gc, GcAllocErr, GcRefCell, GcScope, Trace};
 pub use self::object::AvmObject;
 pub use self::string::AvmString;
-use swf_tree::avm1;
+use avm1_tree as avm1;
 
 mod object;
 mod string;
@@ -90,12 +90,12 @@ impl<'gc> AvmValue<'gc> {
     AvmValue::Number(AvmNumber::new(value))
   }
 
-  pub fn from_ast(gc_scope: &'gc GcScope<'gc>, value: &avm1::actions::Value) -> Result<AvmValue<'gc>, GcAllocErr> {
+  pub fn from_ast(gc_scope: &'gc GcScope<'gc>, value: &avm1::Value) -> Result<AvmValue<'gc>, GcAllocErr> {
     match value {
-      &avm1::actions::Value::CString(ref s) => AvmString::new(gc_scope, s.clone())
+      &avm1::Value::String(ref s) => AvmString::new(gc_scope, s.clone())
         .map(|avm_string| AvmValue::String(avm_string)),
-      &avm1::actions::Value::F64(n) => Ok(AvmValue::Number(AvmNumber::new(n.into()))),
-      &avm1::actions::Value::I32(n) => Ok(AvmValue::Number(AvmNumber::new(n.into()))),
+      &avm1::Value::Float64(n) => Ok(AvmValue::Number(AvmNumber::new(n.into()))),
+      &avm1::Value::Sint32(n) => Ok(AvmValue::Number(AvmNumber::new(n.into()))),
       _ => unimplemented!(),
     }
   }

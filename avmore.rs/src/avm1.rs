@@ -1,7 +1,7 @@
 use ::std::usize;
 
 use ::scoped_gc::{Gc, GcRefCell};
-use swf_tree::avm1;
+use avm1_tree as avm1;
 
 use context::Context;
 use values::{AvmNumber, AvmObject, AvmString, AvmUndefined, AvmValue};

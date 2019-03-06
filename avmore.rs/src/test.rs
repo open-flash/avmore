@@ -2,14 +2,14 @@ use avm1::ExecutionContext;
 use context::Context;
 use ::scoped_gc::GcScope;
 use host::LoggedHost;
-use swf_tree::avm1 as avm1_tree;
+use avm1_tree;
 use values::{AvmString, AvmValue};
 
 #[test]
 fn avm_value_eq() {
   let gc_scope = GcScope::new();
 
-  let ast_val = avm1_tree::actions::Value::CString(String::from("Hello, World!"));
+  let ast_val = avm1_tree::Value::String(String::from("Hello, World!"));
 
   let foo = AvmValue::from_ast(&gc_scope, &ast_val).unwrap();
 
@@ -26,7 +26,7 @@ fn hello_world() {
 
   let actions: Vec<avm1_tree::Action> = vec![
     avm1_tree::Action::Push(avm1_tree::actions::Push {
-      values: vec![avm1_tree::actions::Value::CString(String::from("Hello, World!"))]
+      values: vec![avm1_tree::Value::String(String::from("Hello, World!"))]
     }),
     avm1_tree::Action::Trace,
   ];
@@ -53,9 +53,9 @@ fn one_plus_one_equals_two() {
   let actions: Vec<avm1_tree::Action> = vec![
     avm1_tree::Action::Push(avm1_tree::actions::Push {
       values: vec![
-        avm1_tree::actions::Value::CString(String::from("1 + 1 = ")),
-        avm1_tree::actions::Value::I32(1),
-        avm1_tree::actions::Value::I32(1),
+        avm1_tree::Value::String(String::from("1 + 1 = ")),
+        avm1_tree::Value::Sint32(1),
+        avm1_tree::Value::Sint32(1),
       ]
     }),
     avm1_tree::Action::Add2,
@@ -85,15 +85,15 @@ fn read_object() {
   let actions: Vec<avm1_tree::Action> = vec![
     avm1_tree::Action::Push(avm1_tree::actions::Push {
       values: vec![
-        avm1_tree::actions::Value::CString(String::from("Hello, World!")),
-        avm1_tree::actions::Value::CString(String::from("foo")),
-        avm1_tree::actions::Value::I32(1),
+        avm1_tree::Value::String(String::from("Hello, World!")),
+        avm1_tree::Value::String(String::from("foo")),
+        avm1_tree::Value::Sint32(1),
       ]
     }),
     avm1_tree::Action::InitObject,
     avm1_tree::Action::Push(avm1_tree::actions::Push {
       values: vec![
-        avm1_tree::actions::Value::CString(String::from("foo")),
+        avm1_tree::Value::String(String::from("foo")),
       ]
     }),
     avm1_tree::Action::GetMember,
