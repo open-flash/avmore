@@ -1,0 +1,59 @@
+{
+  "name": "avm1-asm",
+  "version": "0.0.1",
+  "homepage": "https://github.com/open-flash/avm1-tree",
+  "description": "Abstract Syntax Tree for AVM1",
+  "main": "dist/lib/index.js",
+  "types": "dist/lib/index.d.ts",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:open-flash/avm1-tree.git"
+  },
+  "licenses": [
+    {
+      "type": "AGPL-3.0-or-later",
+      "url": "https://spdx.org/licenses/AGPL-3.0-or-later.html"
+    }
+  ],
+  "keywords": [
+    "swf",
+    "ast",
+    "avm1"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "prepare": "gulp all:tsconfig.json && gulp :tslint.json && gulp dist",
+    "test": "gulp :lint && gulp test",
+    "prestart": "gulp main:build",
+    "start": "node build/main/main/main.js",
+    "prepublishOnly": "npm test",
+    "lint": "gulp :lint:fix"
+  },
+  "dependencies": {
+    "avm1-parser": "^0.2.0",
+    "avm1-tree": "^0.2.0"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.1.7",
+    "@types/gulp": "^4.0.5",
+    "@types/minimist": "^1.2.0",
+    "@types/mocha": "^5.2.5",
+    "@types/node": "^10.12.18",
+    "chai": "^4.2.0",
+    "gulp": "^4.0.0",
+    "gulp-cli": "^2.0.1",
+    "minimist": "^1.2.0",
+    "swf-parser": "^0.2.1",
+    "ts-node": "^8.0.2",
+    "tslint": "^5.12.1",
+    "turbo-gulp": "^0.18.0",
+    "typescript": "^3.2.4"
+  },
+  "c88": {
+    "match": [
+      "build/test/lib/*.{js,mjs}",
+      "build/test/lib/**/*.{js,mjs}"
+    ]
+  }
+}
