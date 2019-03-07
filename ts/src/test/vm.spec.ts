@@ -1,24 +1,42 @@
-import { ActionType } from "avm1-tree/action-type";
-import { ValueType } from "avm1-tree/value-type";
 import chai from "chai";
+import fs from "fs";
+import sysPath from "path";
 import { LoggedHost } from "../lib/host";
-import { ExecutionContext } from "../lib/vm";
+import { Vm } from "../lib/vm";
+import meta from "./meta.js";
 
-describe("vm", function () {
-  it("should exec hello world", function () {
-    const host: LoggedHost = new LoggedHost();
+const PROJECT_ROOT: string = sysPath.join(meta.dirname, "..", "..", "..");
+const TEST_SAMPLES_ROOT: string = sysPath.join(PROJECT_ROOT, "..", "tests");
 
-    const ectx: ExecutionContext = new ExecutionContext(host);
-    ectx.exec({
-      action: ActionType.Push,
-      values: [{type: ValueType.String, value: "Hello, World!"}],
+describe("Avmore", function () {
+  for (const sample of getSamples()) {
+    it(sample.name, async function () {
+      const input: Uint8Array = fs.readFileSync(
+        sysPath.join(TEST_SAMPLES_ROOT, `${sample.name}.avm1`),
+        {encoding: null},
+      );
+      const expectedLogs: string = fs.readFileSync(
+        sysPath.join(TEST_SAMPLES_ROOT, `${sample.name}.log`),
+        {encoding: "UTF-8"},
+      );
+
+      const vm: Vm = new Vm();
+      const host: LoggedHost = new LoggedHost();
+
+      const scriptId: number = vm.createAvm1Script(input);
+      vm.runToCompletion(scriptId, host);
+
+      const actualLogs: string = host.logs.map(msg => `${msg}\n`).join("");
+
+      chai.assert.deepEqual(actualLogs, expectedLogs);
     });
-    ectx.exec({action: ActionType.Trace});
-
-    const expectedLogs: ReadonlyArray<string> = [
-      "Hello, World!",
-    ];
-
-    chai.assert.deepEqual(host.logs, expectedLogs);
-  });
+  }
 });
+
+interface Sample {
+  name: string;
+}
+
+function* getSamples(): IterableIterator<Sample> {
+  yield {name: "hello-world"};
+}

@@ -1,3 +1,4 @@
+import { Avm1Parser } from "avm1-parser";
 import { Action } from "avm1-tree/action";
 import { ActionType } from "avm1-tree/action-type";
 import { Push } from "avm1-tree/actions";
@@ -11,6 +12,51 @@ const SWF_VERSION: number = 8;
 //     const parser =
 //   };
 // }
+
+export type Avm1ScriptId = number;
+
+export interface Avm1Script {
+  readonly id: Avm1ScriptId;
+  readonly bytes: Uint8Array;
+}
+
+export class Vm {
+  private nextScriptId: number;
+  private readonly scriptsById: Map<Avm1ScriptId, Avm1Script>;
+
+  constructor() {
+    this.nextScriptId = 0;
+    this.scriptsById = new Map();
+  }
+
+  createAvm1Script(avm1Bytes: Uint8Array): Avm1ScriptId {
+    const id: number = this.nextScriptId++;
+    const script: Avm1Script = {id, bytes: avm1Bytes};
+    this.scriptsById.set(id, script);
+    return id;
+  }
+
+  runToCompletion(scriptId: Avm1ScriptId, host: Host, maxActions: number = 1000): void {
+    const script: Avm1Script | undefined = this.scriptsById.get(scriptId);
+    if (script === undefined) {
+      throw new Error(`ScriptNotFound: ${scriptId}`);
+    }
+    const ectx: ExecutionContext = new ExecutionContext(host);
+    const parser: Avm1Parser = new Avm1Parser(script.bytes);
+    let actionCount: number = 0;
+    while (actionCount < maxActions) {
+      const action: Action | undefined = parser.readNext();
+      if (action === undefined) {
+        break;
+      }
+      ectx.exec(action);
+      actionCount++;
+    }
+    if (actionCount === maxActions) {
+      throw new Error("ActionTimeout");
+    }
+  }
+}
 
 export type AvmString = string;
 
