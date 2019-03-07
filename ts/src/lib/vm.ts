@@ -1,9 +1,9 @@
 import { Avm1Parser } from "avm1-parser";
 import { Action } from "avm1-tree/action";
 import { ActionType } from "avm1-tree/action-type";
-import { Push } from "avm1-tree/actions";
+import { Push, SetTarget } from "avm1-tree/actions";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
-import { Host } from "./host";
+import { Host, Target } from "./host";
 
 const SWF_VERSION: number = 8;
 
@@ -14,10 +14,19 @@ const SWF_VERSION: number = 8;
 // }
 
 export type Avm1ScriptId = number;
+export type TargetId = number;
 
 export interface Avm1Script {
   readonly id: Avm1ScriptId;
   readonly bytes: Uint8Array;
+
+  /**
+   * Default target for this script.
+   *
+   * Used for contextual actions such as `gotoAndPlay` or `stop`.
+   * Value used for `setTarget("");`
+   */
+  readonly target: TargetId | null;
 }
 
 export class Vm {
@@ -29,9 +38,9 @@ export class Vm {
     this.scriptsById = new Map();
   }
 
-  createAvm1Script(avm1Bytes: Uint8Array): Avm1ScriptId {
+  createAvm1Script(avm1Bytes: Uint8Array, target: TargetId | null): Avm1ScriptId {
     const id: number = this.nextScriptId++;
-    const script: Avm1Script = {id, bytes: avm1Bytes};
+    const script: Avm1Script = {id, bytes: avm1Bytes, target};
     this.scriptsById.set(id, script);
     return id;
   }
@@ -41,7 +50,7 @@ export class Vm {
     if (script === undefined) {
       throw new Error(`ScriptNotFound: ${scriptId}`);
     }
-    const ectx: ExecutionContext = new ExecutionContext(host);
+    const ectx: ExecutionContext = new ExecutionContext(host, script.target);
     const parser: Avm1Parser = new Avm1Parser(script.bytes);
     let actionCount: number = 0;
     while (actionCount < maxActions) {
@@ -91,16 +100,26 @@ class AvmStack {
 export class ExecutionContext {
   private readonly stack: AvmStack;
   private readonly host: Host;
+  private target: TargetId | null;
+  private readonly defaultTarget: TargetId | null;
 
-  constructor(host: Host) {
+  constructor(host: Host, defaultTarget: TargetId | null) {
     this.stack = new AvmStack();
     this.host = host;
+    this.target = defaultTarget;
+    this.defaultTarget = defaultTarget;
   }
 
   public exec(action: Action): void {
     switch (action.action) {
       case ActionType.Push:
         this.execPush(action);
+        break;
+      case ActionType.SetTarget:
+        this.execSetTarget(action);
+        break;
+      case ActionType.Stop:
+        this.execStop();
         break;
       case ActionType.Trace:
         this.execTrace();
@@ -121,6 +140,27 @@ export class ExecutionContext {
           console.error(value);
           throw new Error("UnknownValueType");
       }
+    }
+  }
+
+  private execSetTarget(action: SetTarget): void {
+    if (action.targetName === "") {
+      this.target = this.defaultTarget;
+    } else {
+      throw new Error("NotImplemented: execSetTarget(targetName !== \"\")");
+    }
+  }
+
+  private execStop(): void {
+    if (this.target === null) {
+      console.warn("NoCurrentTarget");
+      return;
+    }
+    const target: Target | undefined = this.host.getTarget(this.target);
+    if (target !== undefined) {
+      target.stop();
+    } else {
+      console.warn("TargetNotFound");
     }
   }
 

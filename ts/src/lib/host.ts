@@ -1,15 +1,31 @@
+import { TargetId } from "./vm";
+
 export interface Host {
   trace(message: string): void;
+
+  getTarget(targetId: TargetId): Target | undefined;
+}
+
+export interface Target {
+  stop(): void;
 }
 
 export class NativeHost implements Host {
   trace(message: string): void {
     console.log(message);
   }
+
+  getTarget(): undefined {
+    return undefined;
+  }
 }
 
 export class NoopHost implements Host {
   trace(): void {
+  }
+
+  getTarget(): undefined {
+    return undefined;
   }
 }
 
@@ -22,5 +38,9 @@ export class LoggedHost implements Host {
 
   trace(message: string): void {
     this.logs.push(message);
+  }
+
+  getTarget(): undefined {
+    return undefined;
   }
 }
