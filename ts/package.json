@@ -1,8 +1,8 @@
 {
-  "name": "avm1-asm",
+  "name": "avmore",
   "version": "0.0.1",
-  "homepage": "https://github.com/open-flash/avm1-tree",
-  "description": "Abstract Syntax Tree for AVM1",
+  "homepage": "https://github.com/open-flash/avmore",
+  "description": "Actionscript VM",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
   "private": true,

@@ -8,7 +8,7 @@ homepage = "https://github.com/open-flash/avmore"
 repository = "https://github.com/open-flash/avmore"
 readme = "./README.md"
 keywords = ["vm", "swf", "actionscript"]
-license = "MIT"
+license = "AGPL-3.0-or-later"
 
 [lib]
 name = "avmore"
