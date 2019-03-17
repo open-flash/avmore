@@ -23,7 +23,7 @@ describe("Avmore", function () {
       const vm: Vm = new Vm();
       const host: LoggedHost = new LoggedHost();
 
-      const scriptId: number = vm.createAvm1Script(input);
+      const scriptId: number = vm.createAvm1Script(input, null);
       vm.runToCompletion(scriptId, host);
 
       const actualLogs: string = host.logs.map(msg => `${msg}\n`).join("");

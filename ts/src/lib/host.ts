@@ -16,7 +16,7 @@ export class NativeHost implements Host {
   }
 
   getTarget(): undefined {
-    return undefined;
+    return;
   }
 }
 
@@ -25,7 +25,7 @@ export class NoopHost implements Host {
   }
 
   getTarget(): undefined {
-    return undefined;
+    return;
   }
 }
 
@@ -41,6 +41,6 @@ export class LoggedHost implements Host {
   }
 
   getTarget(): undefined {
-    return undefined;
+    return;
   }
 }
