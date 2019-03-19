@@ -39,4 +39,5 @@ interface Sample {
 
 function* getSamples(): IterableIterator<Sample> {
   yield {name: "hello-world"};
+  yield {name: "object-access"};
 }

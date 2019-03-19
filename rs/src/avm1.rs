@@ -157,8 +157,8 @@ impl<'a, 'gc: 'a> ExecutionContext<'a, 'gc> {
     let property_count: usize = to_usize(self.stack.pop()).unwrap();
     let obj: Gc<GcRefCell<AvmObject>> = AvmObject::new(self.context.gc_scope).unwrap();
     for _ in 0..property_count {
-      let key: String = String::from(self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value());
       let value: AvmValue = self.stack.pop();
+      let key: String = String::from(self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value());
       obj.borrow_mut().set(key, value);
     }
     self.stack.push(AvmValue::Object(obj))
