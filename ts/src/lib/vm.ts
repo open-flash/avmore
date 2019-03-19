@@ -3,6 +3,7 @@ import { Action } from "avm1-tree/action";
 import { ActionType } from "avm1-tree/action-type";
 import { ConstantPool, Push, SetTarget } from "avm1-tree/actions";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
+import { AVM_NULL, AVM_UNDEFINED, AvmObject, AvmObjectProperty, AvmString, AvmValue, AvmValueType } from "./avm-value";
 import { Host, Target } from "./host";
 
 const SWF_VERSION: number = 8;
@@ -67,46 +68,6 @@ export class Vm {
   }
 }
 
-export interface AvmObjectProperty {
-  readonly value: AvmValue;
-}
-
-export class AvmObject {
-  ownProperties: Map<string, AvmObjectProperty>;
-
-  private constructor() {
-    this.ownProperties = new Map();
-  }
-
-  public static empty(): AvmObject {
-    return new AvmObject();
-  }
-
-  public get(key: string): AvmValue {
-    const prop: AvmObjectProperty | undefined = this.ownProperties.get(key);
-    return prop !== undefined ? prop.value : undefined; // `undefined` corresponds to AvmUndefined
-  }
-
-  public setProperty(key: string, value: AvmObject): void {
-    this.ownProperties.set(key, {value});
-  }
-}
-
-export type AvmNumber = number;
-export type AvmString = string;
-
-export type AvmValue = AvmNumber | AvmObject | AvmString | any;
-
-// tslint:disable-next-line:typedef variable-name
-export const AvmValue = {
-  // fromAst(astValue: AstValue): AvmValue {
-  //
-  // }
-  toAvmString(value: AvmValue, _swfVersion: number): AvmString {
-    return String(value);
-  },
-};
-
 class AvmStack {
   private readonly stack: AvmValue[];
 
@@ -119,7 +80,7 @@ class AvmStack {
   }
 
   public pop(): AvmValue {
-    return this.stack.length > 0 ? this.stack.pop() : undefined;
+    return this.stack.length > 0 ? this.stack.pop()! : AVM_UNDEFINED;
   }
 }
 
@@ -137,9 +98,33 @@ class AvmConstantPool {
   public get(index: number): AvmValue {
     // TODO: Warn on out-of-bound pool access?
     // TODO: Mimick unitialized pool with the values used by Adobe's player?
-    return index < this.pool.length ? this.pool[index] : undefined;
+    return index < this.pool.length ? this.pool[index] : AVM_UNDEFINED;
   }
 }
+
+// interface AvmScope {
+//   get(name: string): AvmValue | undefined;
+//   set(name: string, value: AvmValue): void;
+// }
+
+// MovieClip scope, `with` statement
+// class DynamicScope implements AvmScope {
+//   private readonly ectx: ExecutionContext;
+//   private readonly context: AvmValue;
+//
+//   constructor(ectx: ExecutionContext, context: AvmValue) {
+//     this.ectx = ectx;
+//     this.context = context;
+//   }
+//
+//   get(name: string): AvmValue | undefined {
+//     return this.ectx.getMember();
+//   }
+//
+//   set(name: string, value: AvmValue): void {
+//
+//   }
+// }
 
 export class ExecutionContext {
   private readonly constantPool: AvmConstantPool;
@@ -154,6 +139,29 @@ export class ExecutionContext {
     this.host = host;
     this.target = defaultTarget;
     this.defaultTarget = defaultTarget;
+  }
+
+  public getMember(target: AvmValue, key: string): AvmValue {
+    const value: AvmValue | undefined = this.tryGetMember(target, key);
+    return value !== undefined ? value : AVM_UNDEFINED;
+  }
+
+  public tryGetMember(target: AvmValue, key: string): AvmValue | undefined {
+    switch (target.type) {
+      case AvmValueType.Object:
+        const prop: AvmObjectProperty | undefined = target.ownProperties.get(key);
+        return prop !== undefined ? prop.value : prop;
+      default:
+        throw new Error("CannotGetMember");
+    }
+  }
+
+  public newObject(): AvmObject {
+    return {
+      type: AvmValueType.Object,
+      prototype: AVM_NULL,
+      ownProperties: new Map(),
+    };
   }
 
   public exec(action: Action): void {
@@ -199,16 +207,17 @@ export class ExecutionContext {
   }
 
   private execConstantPool(action: ConstantPool): void {
-    this.constantPool.set(action.constantPool);
+    const pool: AvmString[] = [];
+    for (const value of action.constantPool) {
+      pool.push({type: AvmValueType.String as AvmValueType.String, value});
+    }
+    this.constantPool.set(pool);
   }
 
   private execGetMember(): void {
     const key: string = this.toAvmString(this.stack.pop()).toString();
-    const obj: AvmValue = this.stack.pop();
-    if (!(obj instanceof AvmObject)) {
-      throw new Error("InvalidGetMemberTarget");
-    }
-    this.stack.push(obj.get(key));
+    const target: AvmValue = this.stack.pop();
+    this.stack.push(this.getMember(target, key));
   }
 
   private execGetVariable(): void {
@@ -218,11 +227,11 @@ export class ExecutionContext {
   private execInitObject(): void {
     const avmPropertyCount: AvmValue = this.stack.pop();
     const propertyCount: number = this.toUintSize(avmPropertyCount);
-    const obj: AvmObject = AvmObject.empty();
+    const obj: AvmObject = this.newObject();
     for (let _: number = 0; _ < propertyCount; _++) {
       const value: AvmValue = this.stack.pop();
       const key: string = this.toAvmString(this.stack.pop()).toString();
-      obj.setProperty(key, value);
+      obj.ownProperties.set(key, {value});
     }
     this.stack.push(obj);
   }
@@ -238,10 +247,10 @@ export class ExecutionContext {
           this.stack.push(this.constantPool.get(value.value));
           break;
         case AstValueType.Sint32:
-          this.stack.push(value.value /* as AvmNumber */);
+          this.stack.push({type: AvmValueType.Number as AvmValueType.Number, value: value.value});
           break;
         case AstValueType.String:
-          this.stack.push(value.value /* as AvmString */);
+          this.stack.push({type: AvmValueType.String as AvmValueType.String, value: value.value});
           break;
         default:
           throw new Error(`UnknownValueType ${value.type} (${AstValueType[value.type]})`);
@@ -272,20 +281,22 @@ export class ExecutionContext {
 
   private execTrace(): void {
     const message: AvmValue = this.stack.pop();
-    const messageStr: AvmString = message === undefined ? "undefined" : AvmValue.toAvmString(message, SWF_VERSION);
-    this.host.trace(messageStr);
+    const messageStr: AvmString = message.type === AvmValueType.Undefined
+      ? {type: AvmValueType.String as AvmValueType.String, value: "undefined"}
+      : AvmValue.toAvmString(message, SWF_VERSION);
+    this.host.trace(messageStr.value);
   }
 
   private toAvmString(avmValue: AvmValue): AvmString {
-    if (typeof  avmValue === "string") {
+    if (avmValue.type === AvmValueType.String) {
       return avmValue;
     }
     throw new Error("InvalidAvmString");
   }
 
   private toUintSize(avmValue: AvmValue): number {
-    if (typeof  avmValue === "number" && avmValue >= 0 && Math.floor(avmValue) === avmValue) {
-      return avmValue;
+    if (avmValue.type === AvmValueType.Number && avmValue.value >= 0 && Math.floor(avmValue.value) === avmValue.value) {
+      return avmValue.value;
     }
     throw new Error("InvalidUintSize");
   }
