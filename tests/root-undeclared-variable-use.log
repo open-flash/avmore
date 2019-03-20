@@ -1,0 +1,4 @@
+start
+Warning: Reference to undeclared variable, 'foo'
+undefined
+end

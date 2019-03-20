@@ -5,6 +5,7 @@ import { ConstantPool, Push, SetTarget } from "avm1-tree/actions";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
 import { AVM_NULL, AVM_UNDEFINED, AvmObject, AvmObjectProperty, AvmString, AvmValue, AvmValueType } from "./avm-value";
 import { Host, Target } from "./host";
+import { AvmScope, DynamicScope, StaticScope } from "./scope";
 
 const SWF_VERSION: number = 8;
 
@@ -28,6 +29,11 @@ export interface Avm1Script {
    * Value used for `setTarget("");`
    */
   readonly target: TargetId | null;
+
+  /**
+   * Object to use as the root scope (dynamic scope) or `null` to use a static scope.
+   */
+  readonly rootScope: AvmValue | null;
 }
 
 export class Vm {
@@ -39,9 +45,9 @@ export class Vm {
     this.scriptsById = new Map();
   }
 
-  createAvm1Script(avm1Bytes: Uint8Array, target: TargetId | null): Avm1ScriptId {
+  createAvm1Script(avm1Bytes: Uint8Array, target: TargetId | null, rootScope: AvmValue | null): Avm1ScriptId {
     const id: number = this.nextScriptId++;
-    const script: Avm1Script = {id, bytes: avm1Bytes, target};
+    const script: Avm1Script = {id, bytes: avm1Bytes, target, rootScope};
     this.scriptsById.set(id, script);
     return id;
   }
@@ -51,7 +57,8 @@ export class Vm {
     if (script === undefined) {
       throw new Error(`ScriptNotFound: ${scriptId}`);
     }
-    const ectx: ExecutionContext = new ExecutionContext(host, script.target);
+    const scope: AvmScope = script.rootScope !== null ? new DynamicScope(script.rootScope) : new StaticScope();
+    const ectx: ExecutionContext = new ExecutionContext(host, script.target, scope);
     const parser: Avm1Parser = new Avm1Parser(script.bytes);
     let actionCount: number = 0;
     while (actionCount < maxActions) {
@@ -102,43 +109,36 @@ class AvmConstantPool {
   }
 }
 
-// interface AvmScope {
-//   get(name: string): AvmValue | undefined;
-//   set(name: string, value: AvmValue): void;
-// }
-
-// MovieClip scope, `with` statement
-// class DynamicScope implements AvmScope {
-//   private readonly ectx: ExecutionContext;
-//   private readonly context: AvmValue;
-//
-//   constructor(ectx: ExecutionContext, context: AvmValue) {
-//     this.ectx = ectx;
-//     this.context = context;
-//   }
-//
-//   get(name: string): AvmValue | undefined {
-//     return this.ectx.getMember();
-//   }
-//
-//   set(name: string, value: AvmValue): void {
-//
-//   }
-// }
-
 export class ExecutionContext {
   private readonly constantPool: AvmConstantPool;
   private readonly stack: AvmStack;
   private readonly host: Host;
   private target: TargetId | null;
   private readonly defaultTarget: TargetId | null;
+  private readonly scope: AvmScope;
 
-  constructor(host: Host, defaultTarget: TargetId | null) {
+  constructor(host: Host, defaultTarget: TargetId | null, scope: AvmScope) {
     this.constantPool = new AvmConstantPool();
     this.stack = new AvmStack();
+    this.scope = scope;
     this.host = host;
     this.target = defaultTarget;
     this.defaultTarget = defaultTarget;
+  }
+
+  public setMember(target: AvmValue, key: string, value: AvmValue): void {
+    switch (target.type) {
+      case AvmValueType.External: {
+        target.handler.set({type: AvmValueType.String as AvmValueType.String, value: key}, value);
+        break;
+      }
+      case AvmValueType.Object: {
+        target.ownProperties.set(key, {value});
+        break;
+      }
+      default:
+        throw new Error("InvalidSetMemberTarget");
+    }
   }
 
   public getMember(target: AvmValue, key: string): AvmValue {
@@ -172,6 +172,9 @@ export class ExecutionContext {
       case ActionType.ConstantPool:
         this.execConstantPool(action);
         break;
+      case ActionType.DefineLocal:
+        this.execDefineLocal();
+        break;
       case ActionType.GetMember:
         this.execGetMember();
         break;
@@ -189,6 +192,9 @@ export class ExecutionContext {
         break;
       case ActionType.SetTarget:
         this.execSetTarget(action);
+        break;
+      case ActionType.SetVariable:
+        this.execSetVariable();
         break;
       case ActionType.Stop:
         this.execStop();
@@ -214,6 +220,12 @@ export class ExecutionContext {
     this.constantPool.set(pool);
   }
 
+  private execDefineLocal(): void {
+    const value: AvmValue = this.stack.pop();
+    const name: string = this.toAvmString(this.stack.pop()).toString();
+    this.scope.set(name, value, this);
+  }
+
   private execGetMember(): void {
     const key: string = this.toAvmString(this.stack.pop()).toString();
     const target: AvmValue = this.stack.pop();
@@ -221,7 +233,9 @@ export class ExecutionContext {
   }
 
   private execGetVariable(): void {
-    console.warn("NotImplemented: execGetVariable");
+    const name: string = this.toAvmString(this.stack.pop()).toString();
+    const value: AvmValue | undefined = this.scope.get(name, this);
+    this.stack.push(value !== undefined ? value : AVM_UNDEFINED);
   }
 
   private execInitObject(): void {
@@ -264,6 +278,17 @@ export class ExecutionContext {
     } else {
       throw new Error("NotImplemented: execSetTarget(targetName !== \"\")");
     }
+  }
+
+  private execSetVariable(): void {
+    // TODO: Check/fix scope selection (not always the closest one)
+    const value: AvmValue = this.stack.pop();
+    const path: string = this.toAvmString(this.stack.pop()).toString();
+    if (path.indexOf(":") >= 0) {
+      throw new Error("NotImplemented: SetVariableInRemoteTarget");
+    }
+    const name: string = path;
+    this.scope.set(name, value, this);
   }
 
   private execStop(): void {

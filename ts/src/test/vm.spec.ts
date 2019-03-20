@@ -23,7 +23,7 @@ describe("Avmore", function () {
       const vm: Vm = new Vm();
       const host: LoggedHost = new LoggedHost();
 
-      const scriptId: number = vm.createAvm1Script(input, null);
+      const scriptId: number = vm.createAvm1Script(input, null, null);
       vm.runToCompletion(scriptId, host);
 
       const actualLogs: string = host.logs.map(msg => `${msg}\n`).join("");
@@ -40,4 +40,7 @@ interface Sample {
 function* getSamples(): IterableIterator<Sample> {
   yield {name: "hello-world"};
   yield {name: "object-access"};
+  yield {name: "root-simple-assignment"};
+  // yield {name: "root-undeclared-variable-use"};
+  yield {name: "root-var-declaration"};
 }

@@ -1,11 +1,25 @@
 export enum AvmValueType {
   Boolean,
+  External,
   Function,
   Null,
   Number,
   Object,
   String,
   Undefined,
+}
+
+export interface AvmExternalHandler {
+  ownKeys(): AvmValue[];
+
+  set(key: AvmValue, value: AvmValue): void;
+
+  get(key: AvmValue): AvmValue | undefined;
+}
+
+export interface AvmExternal {
+  readonly type: AvmValueType.External;
+  readonly handler: AvmExternalHandler;
 }
 
 export interface AvmBoolean {
@@ -67,7 +81,14 @@ export interface AvmClientFunction {
 
 export type AvmFunction = AvmNativeFunction | AvmClientFunction;
 
-export type AvmValue = AvmBoolean | AvmNull  | AvmNumber |  AvmObject | AvmFunction | AvmUndefined | AvmString;
+export type AvmValue = AvmBoolean
+  | AvmExternal
+  | AvmNull
+  | AvmNumber
+  | AvmObject
+  | AvmFunction
+  | AvmUndefined
+  | AvmString;
 
 // tslint:disable-next-line:typedef variable-name
 export const AvmValue = {
@@ -84,7 +105,7 @@ export const AvmValue = {
   },
 };
 
-export const AVM_NULL: AvmNull = Object.freeze(<AvmNull> {type: AvmValueType.Null});
-export const AVM_UNDEFINED: AvmUndefined = Object.freeze(<AvmUndefined> {type: AvmValueType.Undefined});
-export const AVM_TRUE: AvmBoolean = Object.freeze(<AvmBoolean> {type: AvmValueType.Boolean, value: true});
-export const AVM_FALSE: AvmBoolean = Object.freeze(<AvmBoolean> {type: AvmValueType.Boolean, value: false});
+export const AVM_NULL: AvmNull = Object.freeze(<AvmNull>{type: AvmValueType.Null});
+export const AVM_UNDEFINED: AvmUndefined = Object.freeze(<AvmUndefined>{type: AvmValueType.Undefined});
+export const AVM_TRUE: AvmBoolean = Object.freeze(<AvmBoolean>{type: AvmValueType.Boolean, value: true});
+export const AVM_FALSE: AvmBoolean = Object.freeze(<AvmBoolean>{type: AvmValueType.Boolean, value: false});
