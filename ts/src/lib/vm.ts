@@ -3,7 +3,17 @@ import { Action } from "avm1-tree/action";
 import { ActionType } from "avm1-tree/action-type";
 import { ConstantPool, Push, SetTarget } from "avm1-tree/actions";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
-import { AVM_NULL, AVM_UNDEFINED, AvmObject, AvmObjectProperty, AvmString, AvmValue, AvmValueType } from "./avm-value";
+import {
+  AVM_NULL,
+  AVM_UNDEFINED,
+  AvmExternal,
+  AvmExternalHandler,
+  AvmObject,
+  AvmObjectProperty,
+  AvmString,
+  AvmValue,
+  AvmValueType,
+} from "./avm-value";
 import { Host, Target } from "./host";
 import { AvmScope, DynamicScope, StaticScope } from "./scope";
 
@@ -58,7 +68,7 @@ export class Vm {
       throw new Error(`ScriptNotFound: ${scriptId}`);
     }
     const scope: AvmScope = script.rootScope !== null ? new DynamicScope(script.rootScope) : new StaticScope();
-    const ectx: ExecutionContext = new ExecutionContext(host, script.target, scope);
+    const ectx: ExecutionContext = new ExecutionContext(this, host, script.target, scope);
     const parser: Avm1Parser = new Avm1Parser(script.bytes);
     let actionCount: number = 0;
     while (actionCount < maxActions) {
@@ -71,6 +81,61 @@ export class Vm {
     }
     if (actionCount === maxActions) {
       throw new Error("ActionTimeout");
+    }
+  }
+
+  public newExternal(handler: AvmExternalHandler): AvmExternal {
+    return {
+      type: AvmValueType.External,
+      handler,
+    };
+  }
+
+  public newObject(): AvmObject {
+    return {
+      type: AvmValueType.Object,
+      prototype: AVM_NULL,
+      ownProperties: new Map(),
+    };
+  }
+
+  public setMember(target: AvmValue, key: string, value: AvmValue): void {
+    switch (target.type) {
+      case AvmValueType.External: {
+        target.handler.set(key, value);
+        break;
+      }
+      case AvmValueType.Object: {
+        target.ownProperties.set(key, {value});
+        break;
+      }
+      default:
+        throw new Error("InvalidSetMemberTarget");
+    }
+  }
+
+  public getMember(target: AvmValue, key: string): AvmValue {
+    const value: AvmValue | undefined = this.tryGetMember(target, key);
+    return value !== undefined ? value : AVM_UNDEFINED;
+  }
+
+  public tryGetMember(target: AvmValue, key: string): AvmValue | undefined {
+    switch (target.type) {
+      case AvmValueType.External: {
+        return target.handler.get(key);
+      }
+      case AvmValueType.Object: {
+        const prop: AvmObjectProperty | undefined = target.ownProperties.get(key);
+        if (prop !== undefined) {
+          return prop.value;
+        }
+        if (target.prototype.type === AvmValueType.External || target.prototype.type === AvmValueType.Object) {
+          return this.tryGetMember(target.prototype, key);
+        }
+        return undefined;
+      }
+      default:
+        throw new Error("CannotGetMember");
     }
   }
 }
@@ -110,6 +175,7 @@ class AvmConstantPool {
 }
 
 export class ExecutionContext {
+  public readonly vm: Vm;
   private readonly constantPool: AvmConstantPool;
   private readonly stack: AvmStack;
   private readonly host: Host;
@@ -117,7 +183,8 @@ export class ExecutionContext {
   private readonly defaultTarget: TargetId | null;
   private readonly scope: AvmScope;
 
-  constructor(host: Host, defaultTarget: TargetId | null, scope: AvmScope) {
+  constructor(vm: Vm, host: Host, defaultTarget: TargetId | null, scope: AvmScope) {
+    this.vm = vm;
     this.constantPool = new AvmConstantPool();
     this.stack = new AvmStack();
     this.scope = scope;
@@ -126,42 +193,17 @@ export class ExecutionContext {
     this.defaultTarget = defaultTarget;
   }
 
-  public setMember(target: AvmValue, key: string, value: AvmValue): void {
-    switch (target.type) {
+  public apply(fn: AvmValue, thisArg: AvmValue, args: ReadonlyArray<AvmValue>): AvmValue {
+    switch (fn.type) {
       case AvmValueType.External: {
-        target.handler.set({type: AvmValueType.String as AvmValueType.String, value: key}, value);
-        break;
-      }
-      case AvmValueType.Object: {
-        target.ownProperties.set(key, {value});
-        break;
+        if (fn.handler.apply === undefined) {
+          throw new Error("CannotApplyExternal");
+        }
+        return fn.handler.apply(thisArg, args);
       }
       default:
-        throw new Error("InvalidSetMemberTarget");
+        throw new Error("CannotApply");
     }
-  }
-
-  public getMember(target: AvmValue, key: string): AvmValue {
-    const value: AvmValue | undefined = this.tryGetMember(target, key);
-    return value !== undefined ? value : AVM_UNDEFINED;
-  }
-
-  public tryGetMember(target: AvmValue, key: string): AvmValue | undefined {
-    switch (target.type) {
-      case AvmValueType.Object:
-        const prop: AvmObjectProperty | undefined = target.ownProperties.get(key);
-        return prop !== undefined ? prop.value : prop;
-      default:
-        throw new Error("CannotGetMember");
-    }
-  }
-
-  public newObject(): AvmObject {
-    return {
-      type: AvmValueType.Object,
-      prototype: AVM_NULL,
-      ownProperties: new Map(),
-    };
   }
 
   public exec(action: Action): void {
@@ -209,7 +251,21 @@ export class ExecutionContext {
   }
 
   private execCallMethod(): void {
-    console.warn("NotImplemented: execCallMethod");
+    const avmKey: AvmValue = this.stack.pop();
+    if (avmKey.type === AvmValueType.Undefined) {
+      throw new Error("NotImplemented: undefined key for execCallMethod");
+    }
+    const key: string = this.toAvmString(avmKey).value;
+    const obj: AvmValue = this.stack.pop();
+    const method: AvmValue = this.vm.getMember(obj, key);
+    const avmArgCount: AvmValue = this.stack.pop();
+    const argCount: number = this.toUintSize(avmArgCount);
+    const args: AvmValue[] = [];
+    for (let _: number = 0; _ < argCount; _++) {
+      args.push(this.stack.pop());
+    }
+    const result: AvmValue = this.apply(method, obj, args);
+    this.stack.push(result);
   }
 
   private execConstantPool(action: ConstantPool): void {
@@ -222,18 +278,18 @@ export class ExecutionContext {
 
   private execDefineLocal(): void {
     const value: AvmValue = this.stack.pop();
-    const name: string = this.toAvmString(this.stack.pop()).toString();
+    const name: string = this.toAvmString(this.stack.pop()).value;
     this.scope.set(name, value, this);
   }
 
   private execGetMember(): void {
-    const key: string = this.toAvmString(this.stack.pop()).toString();
+    const key: string = this.toAvmString(this.stack.pop()).value;
     const target: AvmValue = this.stack.pop();
-    this.stack.push(this.getMember(target, key));
+    this.stack.push(this.vm.getMember(target, key));
   }
 
   private execGetVariable(): void {
-    const name: string = this.toAvmString(this.stack.pop()).toString();
+    const name: string = this.toAvmString(this.stack.pop()).value;
     const value: AvmValue | undefined = this.scope.get(name, this);
     this.stack.push(value !== undefined ? value : AVM_UNDEFINED);
   }
@@ -241,10 +297,10 @@ export class ExecutionContext {
   private execInitObject(): void {
     const avmPropertyCount: AvmValue = this.stack.pop();
     const propertyCount: number = this.toUintSize(avmPropertyCount);
-    const obj: AvmObject = this.newObject();
+    const obj: AvmObject = this.vm.newObject();
     for (let _: number = 0; _ < propertyCount; _++) {
       const value: AvmValue = this.stack.pop();
-      const key: string = this.toAvmString(this.stack.pop()).toString();
+      const key: string = this.toAvmString(this.stack.pop()).value;
       obj.ownProperties.set(key, {value});
     }
     this.stack.push(obj);
@@ -283,7 +339,7 @@ export class ExecutionContext {
   private execSetVariable(): void {
     // TODO: Check/fix scope selection (not always the closest one)
     const value: AvmValue = this.stack.pop();
-    const path: string = this.toAvmString(this.stack.pop()).toString();
+    const path: string = this.toAvmString(this.stack.pop()).value;
     if (path.indexOf(":") >= 0) {
       throw new Error("NotImplemented: SetVariableInRemoteTarget");
     }

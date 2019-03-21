@@ -12,9 +12,11 @@ export enum AvmValueType {
 export interface AvmExternalHandler {
   ownKeys(): AvmValue[];
 
-  set(key: AvmValue, value: AvmValue): void;
+  apply?(thisArg: AvmValue | undefined, args: ReadonlyArray<AvmValue>): AvmValue;
 
-  get(key: AvmValue): AvmValue | undefined;
+  set(key: string, value: AvmValue): void;
+
+  get(key: string): AvmValue | undefined;
 }
 
 export interface AvmExternal {
@@ -105,7 +107,7 @@ export const AvmValue = {
   },
 };
 
-export const AVM_NULL: AvmNull = Object.freeze(<AvmNull>{type: AvmValueType.Null});
-export const AVM_UNDEFINED: AvmUndefined = Object.freeze(<AvmUndefined>{type: AvmValueType.Undefined});
-export const AVM_TRUE: AvmBoolean = Object.freeze(<AvmBoolean>{type: AvmValueType.Boolean, value: true});
-export const AVM_FALSE: AvmBoolean = Object.freeze(<AvmBoolean>{type: AvmValueType.Boolean, value: false});
+export const AVM_NULL: AvmNull = Object.freeze({type: AvmValueType.Null as AvmValueType.Null});
+export const AVM_UNDEFINED: AvmUndefined = Object.freeze({type: AvmValueType.Undefined as AvmValueType.Undefined});
+export const AVM_TRUE: AvmBoolean = Object.freeze({type: AvmValueType.Boolean as AvmValueType.Boolean, value: true});
+export const AVM_FALSE: AvmBoolean = Object.freeze({type: AvmValueType.Boolean as AvmValueType.Boolean, value: false});

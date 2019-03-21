@@ -16,11 +16,11 @@ export class DynamicScope implements AvmScope {
   }
 
   get(name: string, ectx: ExecutionContext): AvmValue | undefined {
-    return ectx.tryGetMember(this.scope, name);
+    return ectx.vm.tryGetMember(this.scope, name);
   }
 
   set(name: string, value: AvmValue, ectx: ExecutionContext): void {
-    return ectx.setMember(this.scope, name, value);
+    return ectx.vm.setMember(this.scope, name, value);
   }
 }
 
