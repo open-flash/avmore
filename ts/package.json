@@ -1,6 +1,6 @@
 {
   "name": "avmore",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "homepage": "https://github.com/open-flash/avmore",
   "description": "Actionscript VM",
   "main": "dist/lib/index.js",
