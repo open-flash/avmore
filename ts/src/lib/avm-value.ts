@@ -57,6 +57,13 @@ export interface AvmObject {
   readonly ownProperties: Map<string, AvmObjectProperty>;
 }
 
+/**
+ * A call result is a tuple `[isThrow, value]`.
+ *
+ * `result[0]` is a boolean indicating if the result is a `throw` or `return`:
+ * - if `false`, then `result[1]` is a "return value"
+ * - if `true`, then `result[1]` is a "throw value"
+ */
 export type AvmCallResult = [boolean, AvmValue];
 
 export interface AvmCall {

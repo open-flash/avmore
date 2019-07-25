@@ -1,5 +1,3 @@
 # Garbage collection
 
-Mark & Sweep garbage collector:
-
-
+TODO: Describe the mark & Sweep garbage collector.
