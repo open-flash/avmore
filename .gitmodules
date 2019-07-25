@@ -1,0 +1,3 @@
+[submodule "tests/avm1"]
+	path = tests/avm1
+	url = https://github.com/open-flash-db/avm1.git
