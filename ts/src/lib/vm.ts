@@ -4,10 +4,13 @@ import { ActionType } from "avm1-tree/action-type";
 import { ConstantPool, Push, SetTarget } from "avm1-tree/actions";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
 import {
-  AVM_NULL,
-  AVM_UNDEFINED,
+  AVM_FALSE,
+  AVM_NULL, AVM_ONE, AVM_TRUE,
+  AVM_UNDEFINED, AVM_ZERO,
+  AvmBoolean,
   AvmExternal,
   AvmExternalHandler,
+  AvmNumber,
   AvmObject,
   AvmObjectProperty,
   AvmString,
@@ -217,6 +220,9 @@ export class ExecutionContext {
       case ActionType.DefineLocal:
         this.execDefineLocal();
         break;
+      case ActionType.Equals2:
+        this.execEquals2();
+        break;
       case ActionType.GetMember:
         this.execGetMember();
         break;
@@ -225,6 +231,9 @@ export class ExecutionContext {
         break;
       case ActionType.InitObject:
         this.execInitObject();
+        break;
+      case ActionType.Not:
+        this.execNot();
         break;
       case ActionType.Pop:
         this.execPop();
@@ -240,6 +249,9 @@ export class ExecutionContext {
         break;
       case ActionType.Stop:
         this.execStop();
+        break;
+      case ActionType.StrictEquals:
+        this.execStrictEquals();
         break;
       case ActionType.Trace:
         this.execTrace();
@@ -282,6 +294,13 @@ export class ExecutionContext {
     this.scope.set(name, value, this);
   }
 
+  private execEquals2(): void {
+    const right: AvmValue = this.stack.pop();
+    const left: AvmValue = this.stack.pop();
+    const result: AvmBoolean = AvmValue.fromHostBoolean(this.abstractEquals(left, right));
+    this.stack.push(result);
+  }
+
   private execGetMember(): void {
     const key: string = this.toAvmString(this.stack.pop()).value;
     const target: AvmValue = this.stack.pop();
@@ -306,6 +325,16 @@ export class ExecutionContext {
     this.stack.push(obj);
   }
 
+  private execNot(): void {
+    const arg: AvmValue = this.stack.pop();
+    const argBoolean: AvmBoolean = AvmValue.toAvmBoolean(arg, SWF_VERSION);
+    if (SWF_VERSION >= 5) {
+      this.stack.push(argBoolean.value ? AVM_FALSE : AVM_TRUE);
+    } else {
+      this.stack.push(argBoolean.value ? AVM_ZERO : AVM_ONE);
+    }
+  }
+
   private execPop(): void {
     this.stack.pop();
   }
@@ -313,14 +342,29 @@ export class ExecutionContext {
   private execPush(action: Push): void {
     for (const value of action.values) {
       switch (value.type) {
+        case AstValueType.Boolean:
+          this.stack.push({type: AvmValueType.Boolean as AvmValueType.Boolean, value: value.value});
+          break;
         case AstValueType.Constant:
           this.stack.push(this.constantPool.get(value.value));
+          break;
+        case AstValueType.Float32:
+          this.stack.push({type: AvmValueType.Number as AvmValueType.Number, value: value.value});
+          break;
+        case AstValueType.Float64:
+          this.stack.push({type: AvmValueType.Number as AvmValueType.Number, value: value.value});
+          break;
+        case AstValueType.Null:
+          this.stack.push(AVM_NULL);
           break;
         case AstValueType.Sint32:
           this.stack.push({type: AvmValueType.Number as AvmValueType.Number, value: value.value});
           break;
         case AstValueType.String:
           this.stack.push({type: AvmValueType.String as AvmValueType.String, value: value.value});
+          break;
+        case AstValueType.Undefined:
+          this.stack.push(AVM_UNDEFINED);
           break;
         default:
           throw new Error(`UnknownValueType ${value.type} (${AstValueType[value.type]})`);
@@ -360,6 +404,13 @@ export class ExecutionContext {
     }
   }
 
+  private execStrictEquals(): void {
+    const right: AvmValue = this.stack.pop();
+    const left: AvmValue = this.stack.pop();
+    const result: AvmBoolean = AvmValue.fromHostBoolean(this.abstractStrictEquals(left, right));
+    this.stack.push(result);
+  }
+
   private execTrace(): void {
     const message: AvmValue = this.stack.pop();
     const messageStr: AvmString = message.type === AvmValueType.Undefined
@@ -380,5 +431,113 @@ export class ExecutionContext {
       return avmValue.value;
     }
     throw new Error("InvalidUintSize");
+  }
+
+  private abstractStrictEquals(left: AvmValue, right: AvmValue): boolean {
+    if (left.type === right.type) {
+      return this.abstractEquals(left, right);
+    }
+    return false;
+  }
+
+  // Implementation of the AbstractEquals algorithm from ECMA 262-3, section 11.9.3
+  private abstractEquals(left: AvmValue, right: AvmValue): boolean {
+    // | x   \   y | Undef | Null | Num         | Str              | Bool             | Obj |
+    // | Undef     | true  | true |             |                  |                  |     |
+    // | Null      | true  | true |             |                  |                  |     |
+    // | Num       |       |      | eq          | x eq Num(y)      | x eq Num(y)      |     |
+    // | Str       |       |      | Num(x) eq y | eq               | Num(x) eq Num(y) |     |
+    // | Bool      |       |      | Num(x) eq y | Num(x) eq Num(y) | eq               |     |
+    // | Obj       |       |      |             |                  |                  | eq  |
+
+    // TODO: Treat `Function`, `Object` and `External` as the same type
+
+    // 1. If Type(x) is different from Type(y), go to step 14.
+    if (left.type === right.type) {
+      switch (left.type) {
+        // 2. If Type(x) is Undefined, return true.
+        case AvmValueType.Undefined:
+          return true;
+        // 3. If Type(x) is Null, return true.
+        case AvmValueType.Null:
+          return true;
+        // 4. If Type(x) is not Number, go to step 11.
+        case AvmValueType.Number:
+          // 5. If x is NaN, return false.
+          // 6. If y is NaN, return false.
+          // 7. If x is the same number value as y, return true.
+          // 8. If x is +0 and y is −0, return true.
+          // 9. If x is −0 and y is +0, return true.
+          // 10. Return false.
+          return left.value === (right as AvmNumber).value;
+        // 11. If Type(x) is String, then return true if x and y are exactly the same sequence of characters (same
+        //     length and same characters in corresponding positions). Otherwise, return false.
+        case AvmValueType.String:
+          return left.value === (right as AvmString).value;
+        // 12. If Type(x) is Boolean, return true if x and y are both true or both false. Otherwise, return false.
+        case AvmValueType.Boolean:
+          return left.value === (right as AvmBoolean).value;
+        // 13. Return true if x and y refer to the same object or if they refer to objects joined to each
+        //     other (see 13.1.2). Otherwise, return false.
+        case AvmValueType.External:
+        case AvmValueType.Function:
+        case AvmValueType.Object:
+          // TODO: Check for joined objects
+          return left === right;
+        default:
+          throw new Error("Unexpected type");
+      }
+    } else {
+      // 14. If x is null and y is undefined, return true.
+      if (left.type === AvmValueType.Null && right.type === AvmValueType.Undefined) {
+        return true;
+      }
+      // 15. If x is undefined and y is null, return true.
+      if (left.type === AvmValueType.Undefined && right.type === AvmValueType.Null) {
+        return true;
+      }
+      // 16. If Type(x) is Number and Type(y) is String,
+      //     return the result of the comparison x == ToNumber(y).
+      if (left.type === AvmValueType.Number && right.type === AvmValueType.String) {
+        const rightNumber: AvmNumber = AvmValue.toAvmNumber(right, SWF_VERSION);
+        return left.value === rightNumber.value;
+      }
+      // 17. If Type(x) is String and Type(y) is Number,
+      //     return the result of the comparison ToNumber(x) == y.
+      if (left.type === AvmValueType.String && right.type === AvmValueType.Number) {
+        const leftNumber: AvmNumber = AvmValue.toAvmNumber(left, SWF_VERSION);
+        return leftNumber.value === right.value;
+      }
+      // 18. If Type(x) is Boolean, return the result of the comparison ToNumber(x) == y.
+      if (left.type === AvmValueType.Boolean) {
+        const leftNumber: AvmNumber = AvmValue.toAvmNumber(left, SWF_VERSION);
+        return this.abstractEquals(leftNumber, right);
+      }
+      // 19. If Type(y) is Boolean, return the result of the comparison x == ToNumber(y).
+      if (right.type === AvmValueType.Boolean) {
+        const rightNumber: AvmNumber = AvmValue.toAvmNumber(right, SWF_VERSION);
+        return this.abstractEquals(left, rightNumber);
+      }
+      // 20. If Type(x) is either String or Number and Type(y) is Object,
+      //     return the result of the comparison x == ToPrimitive(y).
+      if (
+        (left.type === AvmValueType.String || left.type === AvmValueType.Number)
+        && (right.type === AvmValueType.External || right.type === AvmValueType.Function || right.type === AvmValueType.Object)
+      ) {
+        const rightPrimitive: AvmValue = AvmValue.toAvmPrimitive(right, null, SWF_VERSION);
+        return this.abstractEquals(left, rightPrimitive);
+      }
+      // 21. If Type(x) is Object and Type(y) is either String or Number,
+      // return the result of the comparison ToPrimitive(x) == y.
+      if (
+        (left.type === AvmValueType.External || left.type === AvmValueType.Function || left.type === AvmValueType.Object)
+        && (right.type === AvmValueType.String || right.type === AvmValueType.Number)
+      ) {
+        const leftPrimitive: AvmValue = AvmValue.toAvmPrimitive(left, null, SWF_VERSION);
+        return this.abstractEquals(leftPrimitive, right);
+      }
+      // 22. Return false.
+      return false;
+    }
   }
 }

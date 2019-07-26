@@ -12,7 +12,9 @@ const AVM1_SAMPLES_ROOT: string = sysPath.join(REPO_ROOT, "tests", "avm1");
 
 // `BLACKLIST` can be used to forcefully skip some tests.
 const BLACKLIST: ReadonlySet<string> = new Set([
-  "avm1-bytes/corrupted-push",
+  "avm1-bytes/constant-on-stack-definition", // Reads data from the uninitialized constant pool
+  "avm1-bytes/constant-without-pool", // Reads data from the uninitialized constant pool
+  "avm1-bytes/corrupted-push", // The parser does not supported corrupted actions yet
 ]);
 // `WHITELIST` can be used to only enable a few tests.
 const WHITELIST: ReadonlySet<string> = new Set([

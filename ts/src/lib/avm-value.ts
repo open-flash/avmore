@@ -104,13 +104,58 @@ export const AvmValue = {
   // fromAst(astValue: AstValue): AvmValue {
   //
   // }
+  fromHostBoolean(bool: boolean): AvmBoolean {
+    return bool ? AVM_TRUE : AVM_FALSE;
+  },
+  // Implementation of the ToNumber algorithm from ECMA 262-3, section 9.3
+  toAvmBoolean(avmValue: AvmValue, _swfVersion: number): AvmBoolean {
+    switch (avmValue.type) {
+      case AvmValueType.Undefined:
+        return AVM_FALSE;
+      case AvmValueType.Null:
+        return AVM_FALSE;
+      case AvmValueType.Boolean:
+        return avmValue;
+      case AvmValueType.Number:
+        return AvmValue.fromHostBoolean(isNaN(avmValue.value) || avmValue.value === 0);
+      case AvmValueType.String:
+        return AvmValue.fromHostBoolean(avmValue.value.length > 0);
+      default:
+        return AVM_TRUE;
+    }
+  },
+  // Implementation of the ToString algorithm from ECMA 262-3, section 9.8
   toAvmString(avmValue: AvmValue, _swfVersion: number): AvmString {
     switch (avmValue.type) {
       case AvmValueType.String:
         return avmValue;
+      case AvmValueType.Undefined:
+        return {type: AvmValueType.String as AvmValueType.String, value: "undefined"};
+      case AvmValueType.Null:
+        return {type: AvmValueType.String as AvmValueType.String, value: "null"};
+      case AvmValueType.Boolean:
+        return {type: AvmValueType.String as AvmValueType.String, value: avmValue.value ? "true" : "false"};
       default:
-        throw new Error("CannotConvertToString");
+        throw new Error("NotImplemented: Full `ToString` algorithm");
     }
+  },
+  // Implementation of the ToNumber algorithm from ECMA 262-3, section 9.3
+  toAvmNumber(avmValue: AvmValue, _swfVersion: number): AvmNumber {
+    switch (avmValue.type) {
+      case AvmValueType.Undefined:
+        return AVM_NAN;
+      case AvmValueType.Null:
+        return AVM_ZERO;
+      case AvmValueType.Boolean:
+        return avmValue.value ? AVM_ONE : AVM_ZERO;
+      case AvmValueType.Number:
+        return avmValue;
+      default:
+        throw new Error("NotImplemented: Full `ToNumber` algorithm");
+    }
+  },
+  toAvmPrimitive(_avmValue: AvmValue, _hint: any, _swfVersion: number): any {
+    throw new Error("NotImplemented: toAvmPrimitve");
   },
 };
 
@@ -118,3 +163,6 @@ export const AVM_NULL: AvmNull = Object.freeze({type: AvmValueType.Null as AvmVa
 export const AVM_UNDEFINED: AvmUndefined = Object.freeze({type: AvmValueType.Undefined as AvmValueType.Undefined});
 export const AVM_TRUE: AvmBoolean = Object.freeze({type: AvmValueType.Boolean as AvmValueType.Boolean, value: true});
 export const AVM_FALSE: AvmBoolean = Object.freeze({type: AvmValueType.Boolean as AvmValueType.Boolean, value: false});
+export const AVM_NAN: AvmNumber = Object.freeze({type: AvmValueType.Number as AvmValueType.Number, value: NaN});
+export const AVM_ZERO: AvmNumber = Object.freeze({type: AvmValueType.Number as AvmValueType.Number, value: 0});
+export const AVM_ONE: AvmNumber = Object.freeze({type: AvmValueType.Number as AvmValueType.Number, value: 1});
