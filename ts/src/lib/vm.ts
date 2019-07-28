@@ -1,8 +1,13 @@
-import { Avm1Parser } from "avm1-parser";
-import { Action } from "avm1-tree/action";
+// tslint:disable:max-classes-per-file
+
+import { cfgFromBytes } from "avm1-parser";
 import { ActionType } from "avm1-tree/action-type";
 import { ConstantPool, Push, SetTarget } from "avm1-tree/actions";
+import { Cfg } from "avm1-tree/cfg";
+import { CfgAction } from "avm1-tree/cfg-action";
+import { CfgBlock } from "avm1-tree/cfg-block";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
+import { UintSize } from "semantic-types";
 import {
   AVM_FALSE,
   AVM_NULL, AVM_ONE, AVM_TRUE,
@@ -71,15 +76,15 @@ export class Vm {
       throw new Error(`ScriptNotFound: ${scriptId}`);
     }
     const scope: AvmScope = script.rootScope !== null ? new DynamicScope(script.rootScope) : new StaticScope();
-    const ectx: ExecutionContext = new ExecutionContext(this, host, script.target, scope);
-    const parser: Avm1Parser = new Avm1Parser(script.bytes);
+    const cfg: Cfg = cfgFromBytes(script.bytes);
+    const activation: ScriptActivation = new ScriptActivation(cfg);
+    const ectx: ExecutionContext = new ExecutionContext(this, host, script.target, activation, scope);
     let actionCount: number = 0;
     while (actionCount < maxActions) {
-      const action: Action | undefined = parser.readNext();
-      if (action === undefined) {
+      const hasAdvanced: boolean = ectx.nextStep();
+      if (!hasAdvanced) {
         break;
       }
-      ectx.exec(action);
       actionCount++;
     }
     if (actionCount === maxActions) {
@@ -177,23 +182,69 @@ class AvmConstantPool {
   }
 }
 
+abstract class BaseActivation {
+  readonly cfg: Cfg;
+  curBlock?: CfgBlock;
+  curAction: UintSize;
+
+  constructor(cfg: Cfg) {
+    this.cfg = cfg;
+    if (cfg.blocks.length > 0) {
+      this.curBlock = cfg.blocks[0];
+    }
+    this.curAction = 0;
+  }
+}
+
+class ScriptActivation extends BaseActivation {
+}
+
+class FunctionActivation extends BaseActivation {
+  returnValue: AvmValue;
+
+  constructor(cfg: Cfg) {
+    super(cfg);
+    this.returnValue = AVM_UNDEFINED;
+  }
+}
+
+type Activation = ScriptActivation | FunctionActivation;
+
 export class ExecutionContext {
   public readonly vm: Vm;
   private readonly constantPool: AvmConstantPool;
   private readonly stack: AvmStack;
+  private readonly callStack: Activation[];
   private readonly host: Host;
   private target: TargetId | null;
   private readonly defaultTarget: TargetId | null;
   private readonly scope: AvmScope;
 
-  constructor(vm: Vm, host: Host, defaultTarget: TargetId | null, scope: AvmScope) {
+  constructor(vm: Vm, host: Host, defaultTarget: TargetId | null, activation: Activation, scope: AvmScope) {
     this.vm = vm;
     this.constantPool = new AvmConstantPool();
     this.stack = new AvmStack();
+    this.callStack = [activation];
     this.scope = scope;
     this.host = host;
     this.target = defaultTarget;
     this.defaultTarget = defaultTarget;
+  }
+
+  public nextStep(): boolean {
+    const activation: Activation | undefined = this.callStack[this.callStack.length - 1];
+    if (activation === undefined) {
+      return false;
+    }
+    const block: CfgBlock | undefined = activation.curBlock;
+    const action: CfgAction | undefined = block !== undefined ? block.actions[activation.curAction] : undefined;
+    if (action === undefined) {
+      this.popCall();
+    } else {
+      this.exec(action);
+      activation.curAction++;
+    }
+    return true;
   }
 
   public apply(fn: AvmValue, thisArg: AvmValue, args: ReadonlyArray<AvmValue>): AvmValue {
@@ -209,7 +260,7 @@ export class ExecutionContext {
     }
   }
 
-  public exec(action: Action): void {
+  public exec(action: CfgAction): void {
     switch (action.action) {
       case ActionType.CallMethod:
         this.execCallMethod();
@@ -259,6 +310,17 @@ export class ExecutionContext {
       default:
         console.error(action);
         throw new Error(`UnknownAction: ${action.action} (${ActionType[action.action]})`);
+    }
+  }
+
+  private popCall() {
+    const activation: Activation | undefined = this.callStack.pop();
+    if (activation === undefined) {
+      return;
+    }
+    if (activation instanceof FunctionActivation) {
+      // TODO: Switch on return/catch
+      this.stack.push(activation.returnValue);
     }
   }
 
@@ -522,7 +584,11 @@ export class ExecutionContext {
       //     return the result of the comparison x == ToPrimitive(y).
       if (
         (left.type === AvmValueType.String || left.type === AvmValueType.Number)
-        && (right.type === AvmValueType.External || right.type === AvmValueType.Function || right.type === AvmValueType.Object)
+        && (
+          right.type === AvmValueType.External
+          || right.type === AvmValueType.Function
+          || right.type === AvmValueType.Object
+        )
       ) {
         const rightPrimitive: AvmValue = AvmValue.toAvmPrimitive(right, null, SWF_VERSION);
         return this.abstractEquals(left, rightPrimitive);
@@ -530,7 +596,11 @@ export class ExecutionContext {
       // 21. If Type(x) is Object and Type(y) is either String or Number,
       // return the result of the comparison ToPrimitive(x) == y.
       if (
-        (left.type === AvmValueType.External || left.type === AvmValueType.Function || left.type === AvmValueType.Object)
+        (
+          left.type === AvmValueType.External
+          || left.type === AvmValueType.Function
+          || left.type === AvmValueType.Object
+        )
         && (right.type === AvmValueType.String || right.type === AvmValueType.Number)
       ) {
         const leftPrimitive: AvmValue = AvmValue.toAvmPrimitive(left, null, SWF_VERSION);
