@@ -18,7 +18,7 @@ const BLACKLIST: ReadonlySet<string> = new Set([
 ]);
 // `WHITELIST` can be used to only enable a few tests.
 const WHITELIST: ReadonlySet<string> = new Set([
-  // "avm1-bytes/misaligned-jump",
+  // "branches/conditional-if",
   // "try/try-catch-err",
   // "try/try-ok",
   // "haxe/hello-world",

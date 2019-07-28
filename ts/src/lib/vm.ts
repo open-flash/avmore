@@ -6,12 +6,17 @@ import { ConstantPool, Push, SetTarget } from "avm1-tree/actions";
 import { Cfg } from "avm1-tree/cfg";
 import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgBlock } from "avm1-tree/cfg-block";
+import { CfgBlockType } from "avm1-tree/cfg-block-type";
+import { CfgLabel } from "avm1-tree/cfg-label";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
 import { UintSize } from "semantic-types";
 import {
   AVM_FALSE,
-  AVM_NULL, AVM_ONE, AVM_TRUE,
-  AVM_UNDEFINED, AVM_ZERO,
+  AVM_NULL,
+  AVM_ONE,
+  AVM_TRUE,
+  AVM_UNDEFINED,
+  AVM_ZERO,
   AvmBoolean,
   AvmExternal,
   AvmExternalHandler,
@@ -24,6 +29,8 @@ import {
 } from "./avm-value";
 import { Host, Target } from "./host";
 import { AvmScope, DynamicScope, StaticScope } from "./scope";
+import { CfgIf } from "avm1-tree/cfg-actions/cfg-if";
+import { ReferenceToUndeclaredVariableWarning } from "./error";
 
 const SWF_VERSION: number = 8;
 
@@ -194,6 +201,18 @@ abstract class BaseActivation {
     }
     this.curAction = 0;
   }
+
+  jump(label: CfgLabel): void {
+    // TODO: Handle nesting
+    this.curBlock = undefined;
+    this.curAction = 0;
+    for (const b of this.cfg.blocks) {
+      if (b.label === label) {
+        this.curBlock = b;
+        break;
+      }
+    }
+  }
 }
 
 class ScriptActivation extends BaseActivation {
@@ -237,12 +256,34 @@ export class ExecutionContext {
       return false;
     }
     const block: CfgBlock | undefined = activation.curBlock;
-    const action: CfgAction | undefined = block !== undefined ? block.actions[activation.curAction] : undefined;
-    if (action === undefined) {
+    if (block === undefined) {
       this.popCall();
     } else {
-      this.exec(action);
-      activation.curAction++;
+      if (activation.curAction < block.actions.length) {
+        const action: CfgAction = block.actions[activation.curAction];
+        if (action.action === ActionType.If) {
+          this.execIf(action);
+        } else {
+          this.exec(action);
+          activation.curAction++;
+        }
+      } else if (activation.curAction === block.actions.length) {
+        switch (block.type) {
+          case CfgBlockType.Simple:
+            if (block.next === null) {
+              this.popCall();
+            } else {
+              activation.jump(block.next);
+            }
+            break;
+          case CfgBlockType.Return:
+            throw new Error("NotImplemented: CfgBlockType.Return");
+          default:
+            throw new Error("NotImplemented: CFG block type");
+        }
+      } else {
+        this.popCall();
+      }
     }
     return true;
   }
@@ -372,7 +413,24 @@ export class ExecutionContext {
   private execGetVariable(): void {
     const name: string = this.toAvmString(this.stack.pop()).value;
     const value: AvmValue | undefined = this.scope.get(name, this);
+    if (value === undefined) {
+      this.host.warn(new ReferenceToUndeclaredVariableWarning(name));
+    }
     this.stack.push(value !== undefined ? value : AVM_UNDEFINED);
+  }
+
+  private execIf(action: CfgIf): void {
+    const test: boolean = AvmValue.toAvmBoolean(this.stack.pop(), SWF_VERSION).value;
+    const activation: Activation = this.callStack[this.callStack.length - 1];
+    if (test) {
+      if (action.target === null) {
+        activation.curBlock = undefined;
+      } else {
+        activation.jump(action.target);
+      }
+    } else {
+      activation.curAction++;
+    }
   }
 
   private execInitObject(): void {
@@ -482,10 +540,7 @@ export class ExecutionContext {
   }
 
   private toAvmString(avmValue: AvmValue): AvmString {
-    if (avmValue.type === AvmValueType.String) {
-      return avmValue;
-    }
-    throw new Error("InvalidAvmString");
+    return AvmValue.toAvmString(avmValue, SWF_VERSION);
   }
 
   private toUintSize(avmValue: AvmValue): number {
