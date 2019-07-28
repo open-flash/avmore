@@ -5,6 +5,7 @@ import { ActionType } from "avm1-tree/action-type";
 import { ConstantPool, Push, SetTarget } from "avm1-tree/actions";
 import { Cfg } from "avm1-tree/cfg";
 import { CfgAction } from "avm1-tree/cfg-action";
+import { CfgIf } from "avm1-tree/cfg-actions/cfg-if";
 import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
 import { CfgLabel } from "avm1-tree/cfg-label";
@@ -27,10 +28,9 @@ import {
   AvmValue,
   AvmValueType,
 } from "./avm-value";
+import { ReferenceToUndeclaredVariableWarning } from "./error";
 import { Host, Target } from "./host";
 import { AvmScope, DynamicScope, StaticScope } from "./scope";
-import { CfgIf } from "avm1-tree/cfg-actions/cfg-if";
-import { ReferenceToUndeclaredVariableWarning } from "./error";
 
 const SWF_VERSION: number = 8;
 
@@ -321,6 +321,9 @@ export class ExecutionContext {
       case ActionType.GetVariable:
         this.execGetVariable();
         break;
+      case ActionType.Increment:
+        this.execIncrement();
+        break;
       case ActionType.InitObject:
         this.execInitObject();
         break;
@@ -437,6 +440,13 @@ export class ExecutionContext {
     } else {
       activation.curAction++;
     }
+  }
+
+  private execIncrement(): void {
+    const arg: AvmValue = this.stack.pop();
+    const argNumber: AvmNumber = AvmValue.toAvmNumber(arg, SWF_VERSION);
+    const result: AvmNumber = {type: AvmValueType.Number, value: argNumber.value + 1};
+    this.stack.push(result);
   }
 
   private execInitObject(): void {
