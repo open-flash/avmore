@@ -333,6 +333,9 @@ export class ExecutionContext {
       case ActionType.Push:
         this.execPush(action);
         break;
+      case ActionType.PushDuplicate:
+        this.execPushDuplicate();
+        break;
       case ActionType.SetTarget:
         this.execSetTarget(action);
         break;
@@ -490,6 +493,12 @@ export class ExecutionContext {
           throw new Error(`UnknownValueType ${value.type} (${AstValueType[value.type]})`);
       }
     }
+  }
+
+  private execPushDuplicate(): void {
+    const top: AvmValue = this.stack.pop();
+    this.stack.push(top);
+    this.stack.push(top);
   }
 
   private execSetTarget(action: SetTarget): void {
