@@ -154,8 +154,16 @@ export const AvmValue = {
         throw new Error("NotImplemented: Full `ToNumber` algorithm");
     }
   },
-  toAvmPrimitive(_avmValue: AvmValue, _hint: any, _swfVersion: number): any {
-    throw new Error("NotImplemented: toAvmPrimitve");
+  toAvmPrimitive(avmValue: AvmValue, _hint: any, _swfVersion: number): any {
+    switch (avmValue.type) {
+      case AvmValueType.Undefined:
+      case AvmValueType.Null:
+      case AvmValueType.Boolean:
+      case AvmValueType.Number:
+        return avmValue;
+      default:
+        throw new Error("NotImplemented: Full `ToPrimitive` algorithm");
+    }
   },
 };
 

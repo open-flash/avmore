@@ -324,6 +324,9 @@ export class ExecutionContext {
       case ActionType.InitObject:
         this.execInitObject();
         break;
+      case ActionType.Less2:
+        this.execLess2();
+        break;
       case ActionType.Not:
         this.execNot();
         break;
@@ -448,6 +451,14 @@ export class ExecutionContext {
     this.stack.push(obj);
   }
 
+  private execLess2(): void {
+    const right: AvmValue = this.stack.pop();
+    const left: AvmValue = this.stack.pop();
+    const abstractResult: boolean | undefined = this.abstractCompare(left, right);
+    const result: AvmBoolean = AvmValue.fromHostBoolean(abstractResult === undefined ? false : abstractResult);
+    this.stack.push(result);
+  }
+
   private execNot(): void {
     const arg: AvmValue = this.stack.pop();
     const argBoolean: AvmBoolean = AvmValue.toAvmBoolean(arg, SWF_VERSION);
@@ -557,6 +568,22 @@ export class ExecutionContext {
       return avmValue.value;
     }
     throw new Error("InvalidUintSize");
+  }
+
+  // Implementation of the abstract relational comparison algorithm from ECMA 262-3, section 11.8.5
+  private abstractCompare(left: AvmValue, right: AvmValue): boolean | undefined {
+    const leftPrimitive: AvmValue = AvmValue.toAvmPrimitive(left, "number", SWF_VERSION);
+    const rightPrimitive: AvmValue = AvmValue.toAvmPrimitive(right, "number", SWF_VERSION);
+    if (leftPrimitive.type === AvmValueType.String && rightPrimitive.type === AvmValueType.String) {
+      throw new Error("NotImplemented");
+    } else {
+      const leftNumber: AvmNumber = AvmValue.toAvmNumber(leftPrimitive, SWF_VERSION);
+      const rightNumber: AvmNumber = AvmValue.toAvmNumber(rightPrimitive, SWF_VERSION);
+      if (isNaN(leftNumber.value) || isNaN(rightNumber.value)) {
+        return undefined;
+      }
+      return leftNumber.value < rightNumber.value;
+    }
   }
 
   private abstractStrictEquals(left: AvmValue, right: AvmValue): boolean {
