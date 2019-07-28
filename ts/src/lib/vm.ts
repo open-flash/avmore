@@ -321,6 +321,9 @@ export class ExecutionContext {
       case ActionType.GetVariable:
         this.execGetVariable();
         break;
+      case ActionType.Greater:
+        this.execGreater();
+        break;
       case ActionType.Increment:
         this.execIncrement();
         break;
@@ -426,6 +429,14 @@ export class ExecutionContext {
       this.host.warn(new ReferenceToUndeclaredVariableWarning(name));
     }
     this.stack.push(value !== undefined ? value : AVM_UNDEFINED);
+  }
+
+  private execGreater(): void {
+    const right: AvmValue = this.stack.pop();
+    const left: AvmValue = this.stack.pop();
+    const abstractResult: boolean | undefined = this.abstractCompare(right, left);
+    const result: AvmBoolean = AvmValue.fromHostBoolean(abstractResult === undefined ? false : abstractResult);
+    this.stack.push(result);
   }
 
   private execIf(action: CfgIf): void {
