@@ -39,7 +39,7 @@ impl<'gc> Vm<'gc> {
   }
 
   pub fn run_to_completion(&mut self, script_id: Avm1ScriptId) -> () {
-    // TODO: Avoid `clone`
+    // TODO: Avoid `clone` (use `Rc` in `scripts_by_id`?)
     let script: Avm1Script = {
       self.scripts_by_id.get(&script_id).unwrap().clone()
     };
@@ -54,8 +54,13 @@ impl<'gc> Vm<'gc> {
 
     let mut ectx = ExecutionContext::new(self, frame);
 
-    ectx.next();
-    ectx.next();
+    const MAX_ACTIONS: usize = 1000;
+    for _ in 0..MAX_ACTIONS {
+      let has_advanced = ectx.next();
+      if !has_advanced {
+        break;
+      }
+    }
   }
 }
 
@@ -153,10 +158,17 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     }
   }
 
-  pub fn next(&mut self) -> () {
+  /// Executes the next step, returns a boolean `has_advanced`.
+  pub fn next(&mut self) -> bool {
+    // TODO: Cleaner support for the `End` action
+    if self.frame.ip >= self.frame.code.len() || self.frame.code[self.frame.ip] == 0 {
+      return false;
+    }
+
     let (input, action) = avm1_parser::parse_action(&self.frame.code[self.frame.ip..]).unwrap();
     self.frame.ip = input.as_ptr() as usize - self.frame.code.as_ptr() as usize;
     self.exec(&action);
+    true
   }
 
   pub fn exec(&mut self, action: &avm1::Action) -> () {
