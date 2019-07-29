@@ -5,8 +5,8 @@ use ::scoped_gc::{Gc, GcRefCell};
 use avm1_tree as avm1;
 use scoped_gc::GcScope;
 
-use host::Host;
-use values::{AvmNumber, AvmObject, AvmString, AvmUndefined, AvmValue};
+use crate::host::Host;
+use crate::values::{AvmNumber, AvmObject, AvmString, AvmUndefined, AvmValue};
 
 pub struct Vm<'gc> {
   gc: GcScope<'gc>,

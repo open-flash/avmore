@@ -1,8 +1,10 @@
 use ::std::collections::hash_map::HashMap;
+
 use ::scoped_gc::GcScope;
-use crate::host::Host;
 use avm1_tree;
-use values::AvmValue;
+
+use crate::host::Host;
+use crate::values::AvmValue;
 
 pub struct Context<'gc> {
   pub swf_version: u8,

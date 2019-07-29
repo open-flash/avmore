@@ -1,9 +1,10 @@
 use ::scoped_gc::GcScope;
 use avm1_tree;
 
-use avm1::Vm;
-use host::LoggedHost;
-use values::{AvmString, AvmValue};
+use crate::avm1::Vm;
+use crate::host::LoggedHost;
+use crate::values::{AvmString, AvmValue};
+use ::test_generator::test_expand_paths;
 
 #[test]
 fn avm_value_eq() {
@@ -16,11 +17,7 @@ fn avm_value_eq() {
   assert_eq!(foo, AvmValue::String(AvmString::new(&gc_scope, String::from("Hello, World!")).unwrap()));
 }
 
-#[test]
-fn hello_world() {
-  test_avm1("../tests/avm1/samples/hello-world/main.avm1");
-}
-
+test_expand_paths! { test_avm1; "../tests/avm1/*/*/main.avm1" }
 fn test_avm1(path: &str) {
   let log_path: String = path.replace(".avm1", ".log");
   let avm1_bytes: Vec<u8> = ::std::fs::read(path).expect("Failed to read AVM1 file");
