@@ -16,7 +16,11 @@ pub struct AvmNull;
 pub struct AvmNumber(f64);
 
 impl AvmNumber {
-  pub fn new(value: f64) -> AvmNumber {
+  const ZERO: Self = AvmNumber(0f64);
+  const ONE: Self = AvmNumber(1f64);
+  const NAN: Self = AvmNumber(::std::f64::NAN);
+
+  pub const fn new(value: f64) -> AvmNumber {
     // TODO: Handle normalization of `NaN` and `-0` to canonical `NaN` and `+0`.
     AvmNumber(value)
   }
@@ -49,8 +53,6 @@ pub enum AvmValue<'gc> {
   String(Gc<'gc, AvmString>),
 }
 
-//pub const AVM_UNDEFINED: AvmValue = AvmValue::Undefined(AvmUndefined);
-
 // Corresponds to a data equality (NaN is equal to NaN)
 impl<'gc> PartialEq for AvmValue<'gc> {
   fn eq(&self, other: &AvmValue) -> bool {
@@ -76,13 +78,20 @@ unsafe impl<'gc> Trace for AvmValue<'gc> {
 }
 
 impl<'gc> AvmValue<'gc> {
-  pub const fn undefined() -> Self {
-    AvmValue::Undefined(AvmUndefined)
-  }
+  pub const UNDEFINED: Self = AvmValue::Undefined(AvmUndefined);
+  pub const ZERO: Self = AvmValue::Number(AvmNumber::ZERO);
+  pub const ONE: Self = AvmValue::Number(AvmNumber::ONE);
+  pub const NAN: Self = AvmValue::Number(AvmNumber::NAN);
+  pub const FALSE: Self = AvmValue::Boolean(AvmBoolean(false));
+  pub const TRUE: Self = AvmValue::Boolean(AvmBoolean(true));
 
   pub fn legacy_boolean(value: bool, swf_version: u8) -> AvmValue<'gc> {
     if swf_version < 5 {
-      AvmValue::Number(AvmNumber::new(if value { 1f64 } else { 0f64 }))
+      if value {
+        AvmValue::ONE
+      } else {
+        AvmValue::ZERO
+      }
     } else {
       AvmValue::Boolean(AvmBoolean::new(value))
     }
@@ -121,9 +130,10 @@ impl<'gc> AvmValue<'gc> {
   /// The conversion follows ES-262-3 section 9.3 ("ToNumber")
   pub fn to_avm_number(&self) -> AvmNumber {
     match self {
-      &AvmValue::Undefined(_) => AvmNumber::new(::std::f64::NAN),
-      &AvmValue::Null(_) => AvmNumber::new(0f64),
-      &AvmValue::Boolean(_) => unimplemented!(),
+      &AvmValue::Undefined(_) => AvmNumber::NAN,
+      &AvmValue::Null(_) => AvmNumber::ZERO,
+      &AvmValue::Boolean(AvmBoolean(false)) => AvmNumber::ZERO,
+      &AvmValue::Boolean(AvmBoolean(true)) => AvmNumber::ONE,
       &AvmValue::Number(avm_number) => avm_number,
       &AvmValue::String(_) => unimplemented!(),
       &AvmValue::Object(_) => unimplemented!(),
@@ -132,13 +142,13 @@ impl<'gc> AvmValue<'gc> {
 
   /// Converts the current value to an `AvmNumber` using legacy rules.
   ///
-  /// `AvmNumber` are returned as-is, other types return `AvmNumber::new(0f64)`.
+  /// `AvmNumber` are returned as-is, other types return `AvmNumber::ZERO`.
   ///
   /// TODO: Check how strings are handled (parseFloat?)
   pub fn legacy_to_avm_number(&self) -> AvmNumber {
     match self {
       &AvmValue::Number(avm_number) => avm_number,
-      _ => AvmNumber::new(0f64),
+      _ => AvmNumber::ZERO,
     }
   }
 }

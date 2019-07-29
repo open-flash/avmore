@@ -47,7 +47,7 @@ impl<'gc> Vm<'gc> {
     let frame: CallFrame = CallFrame {
       code: &script.code,
       ip: 0,
-      call_result: AvmValue::undefined(),
+      call_result: AvmValue::UNDEFINED,
       stack: Stack::new(),
       parent: None,
     };
@@ -199,7 +199,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   fn exec_add(&mut self) -> () {
     let right = self.frame.stack.pop().legacy_to_avm_number().value();
     let left = self.frame.stack.pop().legacy_to_avm_number().value();
-    self.frame.stack.push(AvmValue::Number(AvmNumber::new(left + right)));
+    self.frame.stack.push(AvmValue::number(left + right));
   }
 
   /// Implements the add operation as defined in ECMA-262-3, section 11.6.1
@@ -220,7 +220,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
         let left = left.to_avm_number();
         let right = right.to_avm_number();
         let result = left.value() + right.value();
-        self.frame.stack.push(AvmValue::Number(AvmNumber::new(result)))
+        self.frame.stack.push(AvmValue::number(result))
       }
     }
   }
