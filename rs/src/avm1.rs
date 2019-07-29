@@ -1,10 +1,87 @@
 use ::std::usize;
+use std::collections::HashMap;
 
 use ::scoped_gc::{Gc, GcRefCell};
 use avm1_tree as avm1;
+use scoped_gc::GcScope;
 
-use context::Context;
+use host::Host;
 use values::{AvmNumber, AvmObject, AvmString, AvmUndefined, AvmValue};
+
+pub struct Vm<'gc> {
+  gc: GcScope<'gc>,
+
+  pub swf_version: u8,
+
+  host: &'gc Host,
+
+  next_script_id: Avm1ScriptId,
+  scripts_by_id: HashMap<Avm1ScriptId, Avm1Script>,
+}
+
+impl<'gc> Vm<'gc> {
+  pub fn new(host: &'gc Host, swf_version: u8) -> Self {
+    Self {
+      gc: GcScope::new(),
+      swf_version,
+      host,
+      next_script_id: Avm1ScriptId(0),
+      scripts_by_id: HashMap::new(),
+    }
+  }
+
+  pub fn create_script(&mut self, uri: Option<String>, code: Vec<u8>, target: Option<TargetId>) -> Avm1ScriptId {
+    let id: Avm1ScriptId = self.next_script_id;
+    self.next_script_id = Avm1ScriptId(id.0 + 1);
+    let script = Avm1Script { id, uri, code, target };
+    self.scripts_by_id.insert(id, script);
+    id
+  }
+
+  pub fn run_to_completion(&mut self, script_id: Avm1ScriptId) -> () {
+    // TODO: Avoid `clone`
+    let script: Avm1Script = {
+      self.scripts_by_id.get(&script_id).unwrap().clone()
+    };
+
+    let frame: CallFrame = CallFrame {
+      code: &script.code,
+      ip: 0,
+      call_result: AvmValue::undefined(),
+      stack: Stack::new(),
+      parent: None,
+    };
+
+    let mut ectx = ExecutionContext::new(self, frame);
+
+    ectx.next();
+    ectx.next();
+  }
+}
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, Ord, PartialOrd)]
+pub struct Avm1ScriptId(usize);
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, Ord, PartialOrd)]
+pub struct TargetId(usize);
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub(crate) struct Avm1Script {
+  /// Key identifying this script, unique for each VM
+  id: Avm1ScriptId,
+
+  /// Optional URI to help the user identify this script.
+  uri: Option<String>,
+
+  /// AVM1 byte code for this script.
+  code: Vec<u8>,
+
+  /// Default target for this script.
+  ///
+  /// The target is used for contextual actions such as `gotoAndPlay` or `stop`.
+  /// The script target acts as the default (e.g. used for `setTarget("");`).
+  target: Option<TargetId>,
+}
 
 struct Stack<'gc> (Vec<AvmValue<'gc>>);
 
@@ -22,15 +99,28 @@ impl<'gc> Stack<'gc> {
   }
 }
 
-pub struct ExecutionContext<'a, 'gc: 'a> {
-  context: &'a Context<'gc>,
+pub struct CallFrame<'frame, 'gc: 'frame> {
+  code: &'frame [u8],
+  // Instruction pointer
+  ip: usize,
+  call_result: AvmValue<'gc>,
   stack: Stack<'gc>,
+  parent: Option<&'frame CallFrame<'frame, 'gc>>,
 }
 
-enum PreferredType {}
+pub struct ExecutionContext<'ectx, 'gc: 'ectx> {
+  vm: &'ectx mut Vm<'gc>,
+  frame: CallFrame<'ectx, 'gc>,
+}
+
+enum PreferredType {
+  None,
+  Number,
+  String,
+}
 
 /// Implements ES-262-3 section 9.1 ("ToPrimitive")
-fn to_primitive(value: AvmValue, _preferred_type: Option<PreferredType>) -> AvmValue {
+fn to_primitive(value: AvmValue, _preferred_type: PreferredType) -> AvmValue {
   match value {
     AvmValue::Undefined(_) => value,
     AvmValue::Null(_) => value,
@@ -55,12 +145,18 @@ fn to_usize(value: AvmValue) -> Option<usize> {
   }
 }
 
-impl<'a, 'gc: 'a> ExecutionContext<'a, 'gc> {
-  pub fn new(context: &'a Context<'gc>) -> ExecutionContext<'a, 'gc> {
-    ExecutionContext {
-      context,
-      stack: Stack::new(),
+impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
+  pub fn new(vm: &'ectx mut Vm<'gc>, frame: CallFrame<'ectx, 'gc>) -> Self {
+    Self {
+      vm,
+      frame,
     }
+  }
+
+  pub fn next(&mut self) -> () {
+    let (input, action) = avm1_parser::parse_action(&self.frame.code[self.frame.ip..]).unwrap();
+    self.frame.ip = input.as_ptr() as usize - self.frame.code.as_ptr() as usize;
+    self.exec(&action);
   }
 
   pub fn exec(&mut self, action: &avm1::Action) -> () {
@@ -89,61 +185,61 @@ impl<'a, 'gc: 'a> ExecutionContext<'a, 'gc> {
   }
 
   fn exec_add(&mut self) -> () {
-    let right = self.stack.pop().legacy_to_avm_number().value();
-    let left = self.stack.pop().legacy_to_avm_number().value();
-    self.stack.push(AvmValue::Number(AvmNumber::new(left + right)));
+    let right = self.frame.stack.pop().legacy_to_avm_number().value();
+    let left = self.frame.stack.pop().legacy_to_avm_number().value();
+    self.frame.stack.push(AvmValue::Number(AvmNumber::new(left + right)));
   }
 
   /// Implements the add operation as defined in ECMA-262-3, section 11.6.1
   /// ("The Addition operator ( + )")
   fn exec_add2(&mut self) -> () {
-    let right = self.stack.pop();
-    let left = self.stack.pop();
-    let left = to_primitive(left, None);
-    let right = to_primitive(right, None);
+    let right = self.frame.stack.pop();
+    let left = self.frame.stack.pop();
+    let left = to_primitive(left, PreferredType::None);
+    let right = to_primitive(right, PreferredType::None);
     match (left, right) {
       (left @ AvmValue::String(_), right) | (left, right @ AvmValue::String(_)) => {
-        let left = left.to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap();
-        let right = right.to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap();
+        let left = left.to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap();
+        let right = right.to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap();
         let result = format!("{}{}", left.value(), right.value());
-        self.stack.push(AvmValue::String(AvmString::new(self.context.gc_scope, result).unwrap()));
+        self.frame.stack.push(AvmValue::String(AvmString::new(&self.vm.gc, result).unwrap()));
       }
       (left, right) => {
         let left = left.to_avm_number();
         let right = right.to_avm_number();
         let result = left.value() + right.value();
-        self.stack.push(AvmValue::Number(AvmNumber::new(result)))
+        self.frame.stack.push(AvmValue::Number(AvmNumber::new(result)))
       }
     }
   }
 
   fn exec_and(&mut self) -> () {
-    let right = self.stack.pop().legacy_to_avm_number().value();
-    let left = self.stack.pop().legacy_to_avm_number().value();
-    self.stack.push(AvmValue::legacy_boolean(left != 0f64 && right != 0f64, self.context.swf_version));
+    let right = self.frame.stack.pop().legacy_to_avm_number().value();
+    let left = self.frame.stack.pop().legacy_to_avm_number().value();
+    self.frame.stack.push(AvmValue::legacy_boolean(left != 0f64 && right != 0f64, self.vm.swf_version));
   }
 
   fn exec_divide(&mut self) -> () {
-    let right = self.stack.pop().legacy_to_avm_number().value();
-    let left = self.stack.pop().legacy_to_avm_number().value();
-    if right == 0f64 && self.context.swf_version < 5 {
-      self.stack.push(AvmValue::String(AvmString::new(self.context.gc_scope, String::from("#ERROR#")).unwrap()))
+    let right = self.frame.stack.pop().legacy_to_avm_number().value();
+    let left = self.frame.stack.pop().legacy_to_avm_number().value();
+    if right == 0f64 && self.vm.swf_version < 5 {
+      self.frame.stack.push(AvmValue::String(AvmString::new(&self.vm.gc, String::from("#ERROR#")).unwrap()))
     } else {
-      self.stack.push(AvmValue::Number(AvmNumber::new(left / right)))
+      self.frame.stack.push(AvmValue::Number(AvmNumber::new(left / right)))
     }
   }
 
   fn exec_equals(&mut self) -> () {
-    let right = self.stack.pop().legacy_to_avm_number().value();
-    let left = self.stack.pop().legacy_to_avm_number().value();
-    self.stack.push(AvmValue::legacy_boolean(left == right, self.context.swf_version))
+    let right = self.frame.stack.pop().legacy_to_avm_number().value();
+    let left = self.frame.stack.pop().legacy_to_avm_number().value();
+    self.frame.stack.push(AvmValue::legacy_boolean(left == right, self.vm.swf_version))
   }
 
   fn exec_get_member(&mut self) -> () {
-    let key: String = String::from(self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value());
-    match self.stack.pop() {
+    let key: String = String::from(self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value());
+    match self.frame.stack.pop() {
       AvmValue::Object(ref avm_object) => {
-        self.stack.push(avm_object.borrow().get(key))
+        self.frame.stack.push(avm_object.borrow().get(key))
       }
       _ => unimplemented!(),
     }
@@ -154,79 +250,79 @@ impl<'a, 'gc: 'a> ExecutionContext<'a, 'gc> {
   }
 
   fn exec_init_object(&mut self) -> () {
-    let property_count: usize = to_usize(self.stack.pop()).unwrap();
-    let obj: Gc<GcRefCell<AvmObject>> = AvmObject::new(self.context.gc_scope).unwrap();
+    let property_count: usize = to_usize(self.frame.stack.pop()).unwrap();
+    let obj: Gc<GcRefCell<AvmObject>> = AvmObject::new(&self.vm.gc).unwrap();
     for _ in 0..property_count {
-      let value: AvmValue = self.stack.pop();
-      let key: String = String::from(self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value());
+      let value: AvmValue = self.frame.stack.pop();
+      let key: String = String::from(self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value());
       obj.borrow_mut().set(key, value);
     }
-    self.stack.push(AvmValue::Object(obj))
+    self.frame.stack.push(AvmValue::Object(obj))
   }
 
   fn exec_less(&mut self) -> () {
-    let right = self.stack.pop().legacy_to_avm_number().value();
-    let left = self.stack.pop().legacy_to_avm_number().value();
-    self.stack.push(AvmValue::legacy_boolean(left < right, self.context.swf_version))
+    let right = self.frame.stack.pop().legacy_to_avm_number().value();
+    let left = self.frame.stack.pop().legacy_to_avm_number().value();
+    self.frame.stack.push(AvmValue::legacy_boolean(left < right, self.vm.swf_version))
   }
 
   fn exec_multiply(&mut self) -> () {
-    let right = self.stack.pop().legacy_to_avm_number().value();
-    let left = self.stack.pop().legacy_to_avm_number().value();
-    self.stack.push(AvmValue::Number(AvmNumber::new(left * right)));
+    let right = self.frame.stack.pop().legacy_to_avm_number().value();
+    let left = self.frame.stack.pop().legacy_to_avm_number().value();
+    self.frame.stack.push(AvmValue::Number(AvmNumber::new(left * right)));
   }
 
   fn exec_not(&mut self) -> () {
-    let value = self.stack.pop().legacy_to_avm_number().value();
-    self.stack.push(AvmValue::legacy_boolean(value == 0f64, self.context.swf_version));
+    let value = self.frame.stack.pop().legacy_to_avm_number().value();
+    self.frame.stack.push(AvmValue::legacy_boolean(value == 0f64, self.vm.swf_version));
   }
 
   fn exec_or(&mut self) -> () {
-    let right = self.stack.pop().legacy_to_avm_number().value();
-    let left = self.stack.pop().legacy_to_avm_number().value();
-    self.stack.push(AvmValue::legacy_boolean(left != 0f64 || right != 0f64, self.context.swf_version));
+    let right = self.frame.stack.pop().legacy_to_avm_number().value();
+    let left = self.frame.stack.pop().legacy_to_avm_number().value();
+    self.frame.stack.push(AvmValue::legacy_boolean(left != 0f64 || right != 0f64, self.vm.swf_version));
   }
 
   pub fn exec_pop(&mut self) -> () {
-    self.stack.pop();
+    self.frame.stack.pop();
   }
 
   fn exec_push(&mut self, push: &avm1::actions::Push) -> () {
     for value in &push.values {
-      self.stack.push(AvmValue::from_ast(self.context.gc_scope, value).unwrap())
+      self.frame.stack.push(AvmValue::from_ast(&self.vm.gc, value).unwrap())
     }
   }
 
   fn exec_string_add(&mut self) -> () {
-    let right = self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value().to_string();
-    let left = self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value().to_string();
-    self.stack.push(AvmValue::string(self.context.gc_scope, format!("{}{}", left, right)).unwrap());
+    let right = self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    let left = self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    self.frame.stack.push(AvmValue::string(&self.vm.gc, format!("{}{}", left, right)).unwrap());
   }
 
   fn exec_string_equals(&mut self) -> () {
-    let right = self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value().to_string();
-    let left = self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value().to_string();
+    let right = self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    let left = self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
     let result = left == right;
-    self.stack.push(AvmValue::legacy_boolean(result, self.context.swf_version));
+    self.frame.stack.push(AvmValue::legacy_boolean(result, self.vm.swf_version));
   }
 
   fn exec_string_length(&mut self) -> () {
-    let value = self.stack.pop().to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value().to_string();
+    let value = self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
     // TODO: Checked conversion
-    self.stack.push(AvmValue::number(value.len() as f64));
+    self.frame.stack.push(AvmValue::number(value.len() as f64));
   }
 
   fn exec_subtract(&mut self) -> () {
-    let right = self.stack.pop().legacy_to_avm_number().value();
-    let left = self.stack.pop().legacy_to_avm_number().value();
-    self.stack.push(AvmValue::number(left - right))
+    let right = self.frame.stack.pop().legacy_to_avm_number().value();
+    let left = self.frame.stack.pop().legacy_to_avm_number().value();
+    self.frame.stack.push(AvmValue::number(left - right))
   }
 
   fn exec_trace(&mut self) -> () {
     // `undefined` is always `undefined` when passed to `trace`, even for swf_version < 7.
-    match self.stack.pop() {
-      AvmValue::Undefined(_) => self.context.trace("undefined"),
-      avm_value => self.context.trace(avm_value.to_avm_string(self.context.gc_scope, self.context.swf_version).unwrap().value()),
+    match self.frame.stack.pop() {
+      AvmValue::Undefined(_) => self.vm.host.trace("undefined"),
+      avm_value => self.vm.host.trace(avm_value.to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value()),
     };
   }
 }

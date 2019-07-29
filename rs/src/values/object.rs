@@ -18,7 +18,7 @@ pub struct AvmObject<'gc> {
 }
 
 impl<'gc> AvmObject<'gc> {
-  pub fn new(gc_scope: &'gc GcScope<'gc>) -> Result<Gc<'gc, GcRefCell<AvmObject<'gc>>>, GcAllocErr> {
+  pub fn new(gc_scope: &GcScope<'gc>) -> Result<Gc<'gc, GcRefCell<AvmObject<'gc>>>, GcAllocErr> {
     gc_scope.alloc(GcRefCell::new(AvmObject {
       properties: HashMap::new(),
     }))

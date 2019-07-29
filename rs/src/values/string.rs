@@ -4,7 +4,7 @@ use ::scoped_gc::{Gc, GcAllocErr, GcScope};
 pub struct AvmString(String);
 
 impl AvmString {
-  pub fn new<'gc>(gc_scope: &'gc GcScope<'gc>, value: String) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+  pub fn new<'gc>(gc_scope: &GcScope<'gc>, value: String) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
     gc_scope.alloc(AvmString(value))
   }
 

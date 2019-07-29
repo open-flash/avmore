@@ -17,7 +17,7 @@ pub struct AvmNumber(f64);
 
 impl AvmNumber {
   pub fn new(value: f64) -> AvmNumber {
-    // TODO: How to deal with `-0`? I think that I remember that it is normalized to `+0`
+    // TODO: Handle normalization of `NaN` and `-0` to canonical `NaN` and `+0`.
     AvmNumber(value)
   }
 
@@ -30,7 +30,7 @@ impl AvmNumber {
 pub struct AvmBoolean(bool);
 
 impl AvmBoolean {
-  pub fn new(value: bool) -> AvmBoolean {
+  pub const fn new(value: bool) -> AvmBoolean {
     AvmBoolean(value)
   }
 
@@ -48,6 +48,8 @@ pub enum AvmValue<'gc> {
   Object(Gc<'gc, GcRefCell<AvmObject<'gc>>>),
   String(Gc<'gc, AvmString>),
 }
+
+//pub const AVM_UNDEFINED: AvmValue = AvmValue::Undefined(AvmUndefined);
 
 // Corresponds to a data equality (NaN is equal to NaN)
 impl<'gc> PartialEq for AvmValue<'gc> {
@@ -74,6 +76,10 @@ unsafe impl<'gc> Trace for AvmValue<'gc> {
 }
 
 impl<'gc> AvmValue<'gc> {
+  pub const fn undefined() -> Self {
+    AvmValue::Undefined(AvmUndefined)
+  }
+
   pub fn legacy_boolean(value: bool, swf_version: u8) -> AvmValue<'gc> {
     if swf_version < 5 {
       AvmValue::Number(AvmNumber::new(if value { 1f64 } else { 0f64 }))
@@ -82,7 +88,7 @@ impl<'gc> AvmValue<'gc> {
     }
   }
 
-  pub fn string(gc_scope: &'gc GcScope<'gc>, value: String) -> Result<AvmValue<'gc>, GcAllocErr> {
+  pub fn string(gc_scope: &GcScope<'gc>, value: String) -> Result<AvmValue<'gc>, GcAllocErr> {
     AvmString::new(gc_scope, value).map(|s| AvmValue::String(s))
   }
 
@@ -90,7 +96,7 @@ impl<'gc> AvmValue<'gc> {
     AvmValue::Number(AvmNumber::new(value))
   }
 
-  pub fn from_ast(gc_scope: &'gc GcScope<'gc>, value: &avm1::Value) -> Result<AvmValue<'gc>, GcAllocErr> {
+  pub fn from_ast(gc_scope: &GcScope<'gc>, value: &avm1::Value) -> Result<AvmValue<'gc>, GcAllocErr> {
     match value {
       &avm1::Value::String(ref s) => AvmString::new(gc_scope, s.clone())
         .map(|avm_string| AvmValue::String(avm_string)),
@@ -100,7 +106,7 @@ impl<'gc> AvmValue<'gc> {
     }
   }
 
-  pub fn to_avm_string(&self, gc_scope: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+  pub fn to_avm_string(&self, gc_scope: &GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
     match self {
       &AvmValue::Undefined(_) => AvmString::new(gc_scope, String::from(if swf_version >= 7 { "undefined" } else { "" })),
       &AvmValue::Null(_) => AvmString::new(gc_scope, String::from("null")),
