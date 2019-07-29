@@ -7,7 +7,7 @@ pub struct AvmObjectProperty<'gc> {
   pub read_only: bool,
   pub enumerable: bool,
   pub deletable: bool,
-  pub intermal: bool,
+  pub internal: bool,
   pub value: AvmValue<'gc>,
 }
 
@@ -29,7 +29,7 @@ impl<'gc> AvmObject<'gc> {
       read_only: false,
       enumerable: true,
       deletable: true,
-      intermal: true,
+      internal: true,
       value,
     };
     self.properties.insert(key, property);
