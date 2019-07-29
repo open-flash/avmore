@@ -28,7 +28,7 @@ fn test_avm1(path: &str) {
 
   let host = LoggedHost::new();
   let mut vm = Vm::new(&host, 11);
-  let script_id = vm.create_script(None, avm1_bytes, None);
+  let script_id = vm.create_script(avm1_bytes, None, None);
   vm.run_to_completion(script_id);
 
   let actual_logs = host.logs.borrow().join("\n") + "\n";

@@ -30,7 +30,7 @@ impl<'gc> Vm<'gc> {
     }
   }
 
-  pub fn create_script(&mut self, uri: Option<String>, code: Vec<u8>, target: Option<TargetId>) -> Avm1ScriptId {
+  pub fn create_script(&mut self, code: Vec<u8>, uri: Option<String>, target: Option<TargetId>) -> Avm1ScriptId {
     let id: Avm1ScriptId = self.next_script_id;
     self.next_script_id = Avm1ScriptId(id.0 + 1);
     let script = Avm1Script { id, uri, code, target };
