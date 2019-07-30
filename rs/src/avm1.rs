@@ -53,6 +53,7 @@ impl<'gc> Vm<'gc> {
       ip: 0,
       call_result: AvmValue::UNDEFINED,
       stack: Stack::new(),
+      scope: Scope::empty(),
       parent: None,
     };
 
@@ -117,6 +118,28 @@ impl<'gc> ConstantPool<'gc> {
   }
 }
 
+struct Scope<'ps, 'gc: 'ps> {
+  variables: HashMap<String, AvmValue<'gc>>,
+  parent: Option<&'ps Scope<'ps, 'gc>>,
+}
+
+impl <'ps, 'gc: 'ps> Scope<'ps, 'gc> {
+  fn empty() -> Self {
+    Self {
+      variables: HashMap::new(),
+      parent: None,
+    }
+  }
+
+  fn set(&mut self, name: String, value: AvmValue<'gc>) -> () {
+    self.variables.insert(name, value);
+  }
+
+  fn get(&mut self, name: &str) -> Option<AvmValue<'gc>> {
+    self.variables.get(name).map(|v| v.clone())
+  }
+}
+
 struct Stack<'gc> (Vec<AvmValue<'gc>>);
 
 impl<'gc> Stack<'gc> {
@@ -139,6 +162,7 @@ pub struct CallFrame<'frame, 'gc: 'frame> {
   ip: usize,
   call_result: AvmValue<'gc>,
   stack: Stack<'gc>,
+  scope: Scope<'frame, 'gc>,
   parent: Option<&'frame CallFrame<'frame, 'gc>>,
 }
 
@@ -205,26 +229,104 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::Add => self.exec_add(),
       &avm1::Action::Add2 => self.exec_add2(),
       &avm1::Action::And => self.exec_and(),
+      &avm1::Action::AsciiToChar => unimplemented!("AsciiToChar"),
+      &avm1::Action::BitAnd => unimplemented!("BitAnd"),
+      &avm1::Action::BitLShift => unimplemented!("BitLShift"),
+      &avm1::Action::BitOr => unimplemented!("BitOr"),
+      &avm1::Action::BitRShift => unimplemented!("BitRShift"),
+      &avm1::Action::BitURShift => unimplemented!("BitURShift"),
+      &avm1::Action::BitXor => unimplemented!("BitXor"),
+      &avm1::Action::Call => unimplemented!("Call"),
+      &avm1::Action::CallFunction => unimplemented!("CallFunction"),
+      &avm1::Action::CallMethod => unimplemented!("CallMethod"),
+      &avm1::Action::CastOp => unimplemented!("CastOp"),
       &avm1::Action::ConstantPool(ref constant_pool) => self.exec_constant_pool(constant_pool),
+      &avm1::Action::CharToAscii => unimplemented!("CharToAscii"),
+      &avm1::Action::CloneSprite => unimplemented!("CloneSprite"),
+      &avm1::Action::Decrement => unimplemented!("Decrement"),
+      &avm1::Action::DefineFunction(_) => unimplemented!("DefineFunction"),
+      &avm1::Action::DefineFunction2(_) => unimplemented!("DefineFunction2"),
+      &avm1::Action::DefineLocal => unimplemented!("DefineLocal"),
+      &avm1::Action::DefineLocal2 => unimplemented!("DefineLocal2"),
+      &avm1::Action::Delete => unimplemented!("Delete"),
+      &avm1::Action::Delete2 => unimplemented!("Delete2"),
       &avm1::Action::Divide => self.exec_divide(),
+      &avm1::Action::EndDrag => unimplemented!("EndDrag"),
+      &avm1::Action::Enumerate => unimplemented!("Enumerate"),
+      &avm1::Action::Enumerate2 => unimplemented!("Enumerate2"),
       &avm1::Action::Equals => self.exec_equals(),
+      &avm1::Action::Equals2 => unimplemented!("Equals2"),
+      &avm1::Action::Extends => unimplemented!("Extends"),
+      &avm1::Action::FsCommand2 => unimplemented!("FsCommand2"),
       &avm1::Action::GetMember => self.exec_get_member(),
+      &avm1::Action::GetProperty => unimplemented!("GetProperty"),
+      &avm1::Action::GetTime => unimplemented!("GetTime"),
+      &avm1::Action::GetUrl(_) => unimplemented!("GetUrl"),
+      &avm1::Action::GetUrl2(_) => unimplemented!("GetUrl2"),
+      &avm1::Action::GetVariable => self.exec_get_variable(),
+      &avm1::Action::GotoFrame(_) => unimplemented!("GotoFrame"),
+      &avm1::Action::GotoFrame2(_) => unimplemented!("GotoFrame2"),
+      &avm1::Action::GotoLabel(_) => unimplemented!("GotoLabel"),
+      &avm1::Action::Greater => unimplemented!("Greater"),
+      &avm1::Action::If(_) => unimplemented!("If"),
+      &avm1::Action::ImplementsOp => unimplemented!("ImplementsOp"),
+      &avm1::Action::Increment => unimplemented!("Increment"),
       &avm1::Action::InitArray => self.exec_init_array(),
       &avm1::Action::InitObject => self.exec_init_object(),
+      &avm1::Action::InstanceOf => unimplemented!("InstanceOf"),
       &avm1::Action::Jump(ref jump) => self.exec_jump(jump),
       &avm1::Action::Less => self.exec_less(),
+      &avm1::Action::Less2 => unimplemented!("Less2"),
+      &avm1::Action::MbAsciiToChar => unimplemented!("MbAsciiToChar"),
+      &avm1::Action::MbCharToAscii => unimplemented!("MbCharToAscii"),
+      &avm1::Action::MbStringExtract => unimplemented!("MbStringExtract"),
+      &avm1::Action::MbStringLength => unimplemented!("MbStringLength"),
+      &avm1::Action::Modulo => unimplemented!("Modulo"),
       &avm1::Action::Multiply => self.exec_multiply(),
+      &avm1::Action::NewMethod => unimplemented!("NewMethod"),
+      &avm1::Action::NewObject => unimplemented!("NewObject"),
+      &avm1::Action::NextFrame => unimplemented!("NextFrame"),
       &avm1::Action::Not => self.exec_not(),
       &avm1::Action::Or => self.exec_or(),
+      &avm1::Action::Play => unimplemented!("Play"),
       &avm1::Action::Pop => self.exec_pop(),
+      &avm1::Action::PrevFrame => unimplemented!("PrevFrame"),
       &avm1::Action::Push(ref push) => self.exec_push(push),
+      &avm1::Action::PushDuplicate => unimplemented!("PushDuplicate"),
+      &avm1::Action::RandomNumber => unimplemented!("RandomNumber"),
+      &avm1::Action::RemoveSprite => unimplemented!("RemoveSprite"),
+      &avm1::Action::Return => unimplemented!("Return"),
+      &avm1::Action::SetMember => unimplemented!("SetMember"),
+      &avm1::Action::SetProperty => unimplemented!("SetProperty"),
+      &avm1::Action::SetTarget(_) => unimplemented!("SetTarget"),
+      &avm1::Action::SetTarget2 => unimplemented!("SetTarget2"),
+      &avm1::Action::SetVariable => unimplemented!("SetVariable"),
+      &avm1::Action::StackSwap => unimplemented!("StackSwap"),
+      &avm1::Action::StartDrag => unimplemented!("StartDrag"),
+      &avm1::Action::Stop => unimplemented!("Stop"),
+      &avm1::Action::StopSounds => unimplemented!("StopSounds"),
+      &avm1::Action::StoreRegister(_) => unimplemented!("StoreRegister"),
       &avm1::Action::StrictEquals => self.exec_strict_equals(),
       &avm1::Action::StringAdd => self.exec_string_add(),
       &avm1::Action::StringEquals => self.exec_string_equals(),
+      &avm1::Action::StringExtract => unimplemented!("StringExtract"),
+      &avm1::Action::StringGreater => unimplemented!("StringGreater"),
       &avm1::Action::StringLength => self.exec_string_length(),
+      &avm1::Action::StringLess => unimplemented!("StringLess"),
       &avm1::Action::Subtract => self.exec_subtract(),
+      &avm1::Action::TargetPath => unimplemented!("TargetPath"),
+      &avm1::Action::ToInteger => unimplemented!("ToInteger"),
+      &avm1::Action::ToNumber => unimplemented!("ToNumber"),
+      &avm1::Action::ToString => unimplemented!("ToString"),
+      &avm1::Action::ToggleQuality => unimplemented!("ToggleQuality"),
+      &avm1::Action::Throw => unimplemented!("Throw"),
       &avm1::Action::Trace => self.exec_trace(),
-      _ => unimplemented!(),
+      &avm1::Action::Try(_) => unimplemented!("Try"),
+      &avm1::Action::TypeOf => unimplemented!("TypeOf"),
+      &avm1::Action::WaitForFrame(_) => unimplemented!("WaitForFrame"),
+      &avm1::Action::WaitForFrame2(_) => unimplemented!("WaitForFrame2"),
+      &avm1::Action::With(_) => unimplemented!("With"),
+      &avm1::Action::Unknown(_) => unimplemented!("Unknown"),
     }
   }
 
@@ -297,6 +399,13 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     }
   }
 
+  fn exec_get_variable(&mut self) -> () {
+    let name = self.frame.stack.pop();
+    let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+    let value = self.frame.scope.get(name.value()).unwrap_or(AvmValue::UNDEFINED);
+    self.frame.stack.push(value);
+  }
+
   fn exec_init_array(&mut self) -> () {
     unimplemented!()
   }
@@ -314,9 +423,6 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
 
   fn exec_jump(&mut self, jump: &avm1::actions::Jump) -> () {
     const I16_MIN_SUCCESSOR: i16 = std::i16::MIN + 1;
-
-    // Extend from i16 to i32 to be able to handle i16::MIN
-    let offset = ::std::i16::MIN;
     let new_offset: usize = match jump.offset {
       std::i16::MIN => self.frame.ip.saturating_sub(0x8000),
       x @ I16_MIN_SUCCESSOR..=-1 => self.frame.ip.saturating_sub(usize::from(-x as u16)),
@@ -360,7 +466,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
         &avm1::Value::Float32(x) => Ok(AvmValue::number(x.into())),
         &avm1::Value::Float64(x) => Ok(AvmValue::number(x.into())),
         &avm1::Value::Null => Ok(AvmValue::NULL),
-        &avm1::Value::Register(idx) => unimplemented!("Push(register)"),
+        &avm1::Value::Register(_idx) => unimplemented!("Push(Register)"),
         &avm1::Value::Sint32(x) => Ok(AvmValue::number(x.into())),
         &avm1::Value::String(ref s) => AvmString::new(self.vm.gc, s.clone())
           .map(|avm_string| AvmValue::String(avm_string)),
@@ -379,7 +485,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       (AvmValue::Boolean(l), AvmValue::Boolean(r)) => l.value() == r.value(),
       (AvmValue::Null(_), AvmValue::Null(_)) => true,
       (AvmValue::Number(l), AvmValue::Number(r)) => l.value() == r.value(),
-      (AvmValue::Object(l), AvmValue::Object(r)) => unimplemented!("StrictEquals(Object, Object)"),
+      (AvmValue::Object(_l), AvmValue::Object(_r)) => unimplemented!("StrictEquals(Object, Object)"),
       (AvmValue::String(l), AvmValue::String(r)) => l.value() == r.value(),
       (AvmValue::Undefined(_), AvmValue::Undefined(_)) => true,
       _ => false,
