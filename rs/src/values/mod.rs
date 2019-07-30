@@ -38,7 +38,7 @@ impl AvmBoolean {
     AvmBoolean(value)
   }
 
-  pub fn inner(&self) -> bool {
+  pub fn value(&self) -> bool {
     self.0
   }
 }
@@ -46,11 +46,11 @@ impl AvmBoolean {
 #[derive(Debug, Clone)]
 pub enum AvmValue<'gc> {
   Boolean(AvmBoolean),
-  Undefined(AvmUndefined),
   Null(AvmNull),
   Number(AvmNumber),
   Object(Gc<'gc, GcRefCell<AvmObject<'gc>>>),
   String(Gc<'gc, AvmString>),
+  Undefined(AvmUndefined),
 }
 
 // Corresponds to a data equality (NaN is equal to NaN)
@@ -140,9 +140,11 @@ impl<'gc> AvmValue<'gc> {
 
   pub fn to_avm_string(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
     match self {
+      &AvmValue::Boolean(AvmBoolean(false)) => AvmString::new(gc, String::from("false")),
+      &AvmValue::Boolean(AvmBoolean(true)) => AvmString::new(gc, String::from("true")),
       &AvmValue::Undefined(_) => AvmString::new(gc, String::from(if swf_version >= 7 { "undefined" } else { "" })),
       &AvmValue::Null(_) => AvmString::new(gc, String::from("null")),
-      &AvmValue::String(ref avm_string) => Ok(Gc::clone(&avm_string)),
+      &AvmValue::String(ref avm_string) => Ok(Gc::clone(avm_string)),
       &AvmValue::Number(ref avm_number) => AvmString::new(gc, format!("{}", avm_number.value())),
       _ => unimplemented!(),
     }

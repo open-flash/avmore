@@ -17,10 +17,28 @@ fn avm_value_eq() {
   assert_eq!(foo, AvmValue::String(AvmString::new(&gc_scope, String::from("Hello, World!")).unwrap()));
 }
 
-test_expand_paths! { test_avm1; "../tests/avm1/*/*/main.avm1" }
+test_expand_paths! { test_avm1; "../tests/avm1/*/*/" }
 fn test_avm1(path: &str) {
-  let log_path: String = path.replace(".avm1", ".log");
-  let avm1_bytes: Vec<u8> = ::std::fs::read(path).expect("Failed to read AVM1 file");
+  use std::path::Path;
+
+  let path: &Path = Path::new(path);
+  let name = path
+    .components()
+    .last()
+    .unwrap()
+    .as_os_str()
+    .to_str()
+    .expect("Failed to retrieve sample name");
+
+  match name {
+    "template" => return, // Internal
+    "constant-on-stack-definition" => return, // Requires uninitialized constant pool
+    _ => (),
+  }
+
+  let avm1_path = path.join("main.avm1");
+  let log_path = path.join("main.log");
+  let avm1_bytes: Vec<u8> = ::std::fs::read(avm1_path).expect("Failed to read AVM1 file");
   let expected_logs: String = ::std::fs::read_to_string(log_path).expect("Failed to read log");
 
   let gc = GcScope::new();

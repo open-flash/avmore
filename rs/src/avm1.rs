@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use ::scoped_gc::{Gc, GcRefCell};
 use avm1_tree as avm1;
-use scoped_gc::{GcScope, GcAllocErr};
+use scoped_gc::{GcAllocErr, GcScope};
 
 use crate::host::Host;
 use crate::values::{AvmNumber, AvmObject, AvmString, AvmValue};
@@ -211,12 +211,14 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::GetMember => self.exec_get_member(),
       &avm1::Action::InitArray => self.exec_init_array(),
       &avm1::Action::InitObject => self.exec_init_object(),
+      &avm1::Action::Jump(ref jump) => self.exec_jump(jump),
       &avm1::Action::Less => self.exec_less(),
       &avm1::Action::Multiply => self.exec_multiply(),
       &avm1::Action::Not => self.exec_not(),
       &avm1::Action::Or => self.exec_or(),
       &avm1::Action::Pop => self.exec_pop(),
       &avm1::Action::Push(ref push) => self.exec_push(push),
+      &avm1::Action::StrictEquals => self.exec_strict_equals(),
       &avm1::Action::StringAdd => self.exec_string_add(),
       &avm1::Action::StringEquals => self.exec_string_equals(),
       &avm1::Action::StringLength => self.exec_string_length(),
@@ -241,10 +243,10 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let right = to_primitive(right, PreferredType::None);
     match (left, right) {
       (left @ AvmValue::String(_), right) | (left, right @ AvmValue::String(_)) => {
-        let left = left.to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap();
-        let right = right.to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap();
+        let left = left.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+        let right = right.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
         let result = format!("{}{}", left.value(), right.value());
-        self.frame.stack.push(AvmValue::String(AvmString::new(&self.vm.gc, result).unwrap()));
+        self.frame.stack.push(AvmValue::String(AvmString::new(self.vm.gc, result).unwrap()));
       }
       (left, right) => {
         let left = left.to_avm_number();
@@ -264,7 +266,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   fn exec_constant_pool(&mut self, constant_pool: &avm1::actions::ConstantPool) -> () {
     let pool: Vec<Gc<'gc, AvmString>> = constant_pool.constant_pool
       .iter()
-      .map(|s| AvmString::new(&self.vm.gc, s.clone()).unwrap())
+      .map(|s| AvmString::new(self.vm.gc, s.clone()).unwrap())
       .collect();
     self.vm.pool.set(pool);
   }
@@ -273,7 +275,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let right = self.frame.stack.pop().legacy_to_avm_number().value();
     let left = self.frame.stack.pop().legacy_to_avm_number().value();
     if right == 0f64 && self.vm.swf_version < 5 {
-      self.frame.stack.push(AvmValue::String(AvmString::new(&self.vm.gc, String::from("#ERROR#")).unwrap()))
+      self.frame.stack.push(AvmValue::String(AvmString::new(self.vm.gc, String::from("#ERROR#")).unwrap()))
     } else {
       self.frame.stack.push(AvmValue::Number(AvmNumber::new(left / right)))
     }
@@ -286,7 +288,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   }
 
   fn exec_get_member(&mut self) -> () {
-    let key: String = String::from(self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value());
+    let key: String = String::from(self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value());
     match self.frame.stack.pop() {
       AvmValue::Object(ref avm_object) => {
         self.frame.stack.push(avm_object.borrow().get(key))
@@ -304,10 +306,19 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let obj: Gc<GcRefCell<AvmObject>> = AvmObject::new(self.vm.gc).unwrap();
     for _ in 0..property_count {
       let value: AvmValue = self.frame.stack.pop();
-      let key: String = String::from(self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value());
+      let key: String = String::from(self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value());
       obj.borrow_mut().set(key, value);
     }
     self.frame.stack.push(AvmValue::Object(obj))
+  }
+
+  fn exec_jump(&mut self, jump: &avm1::actions::Jump) -> () {
+    if jump.offset >= 0 {
+      self.frame.ip.saturating_add(usize::from(jump.offset as u16));
+    } else {
+      // TODO: Handle i16::MIN
+      self.frame.ip.saturating_sub(usize::from((-jump.offset) as u16));
+    }
   }
 
   fn exec_less(&mut self) -> () {
@@ -347,7 +358,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
         &avm1::Value::Null => Ok(AvmValue::NULL),
         &avm1::Value::Register(idx) => unimplemented!("Push(register)"),
         &avm1::Value::Sint32(x) => Ok(AvmValue::number(x.into())),
-        &avm1::Value::String(ref s) => AvmString::new(&self.vm.gc, s.clone())
+        &avm1::Value::String(ref s) => AvmString::new(self.vm.gc, s.clone())
           .map(|avm_string| AvmValue::String(avm_string)),
         &avm1::Value::Undefined => Ok(AvmValue::UNDEFINED),
       };
@@ -356,21 +367,38 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     }
   }
 
+  fn exec_strict_equals(&mut self) -> () {
+    let right = self.frame.stack.pop();
+    let left = self.frame.stack.pop();
+
+    let result: bool = match (left, right) {
+      (AvmValue::Boolean(l), AvmValue::Boolean(r)) => l.value() == r.value(),
+      (AvmValue::Null(_), AvmValue::Null(_)) => true,
+      (AvmValue::Number(l), AvmValue::Number(r)) => l.value() == r.value(),
+      (AvmValue::Object(l), AvmValue::Object(r)) => unimplemented!("StrictEquals(Object, Object)"),
+      (AvmValue::String(l), AvmValue::String(r)) => l.value() == r.value(),
+      (AvmValue::Undefined(_), AvmValue::Undefined(_)) => true,
+      _ => false,
+    };
+
+    self.frame.stack.push(AvmValue::boolean(result));
+  }
+
   fn exec_string_add(&mut self) -> () {
-    let right = self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
-    let left = self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
-    self.frame.stack.push(AvmValue::string(&self.vm.gc, format!("{}{}", left, right)).unwrap());
+    let right = self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    let left = self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    self.frame.stack.push(AvmValue::string(self.vm.gc, format!("{}{}", left, right)).unwrap());
   }
 
   fn exec_string_equals(&mut self) -> () {
-    let right = self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
-    let left = self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    let right = self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    let left = self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
     let result = left == right;
     self.frame.stack.push(AvmValue::legacy_boolean(result, self.vm.swf_version));
   }
 
   fn exec_string_length(&mut self) -> () {
-    let value = self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    let value = self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
     // TODO: Checked conversion
     self.frame.stack.push(AvmValue::number(value.len() as f64));
   }
@@ -385,7 +413,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     // `undefined` is always `undefined` when passed to `trace`, even for swf_version < 7.
     match self.frame.stack.pop() {
       AvmValue::Undefined(_) => self.vm.host.trace("undefined"),
-      avm_value => self.vm.host.trace(avm_value.to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value()),
+      avm_value => self.vm.host.trace(avm_value.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value()),
     };
   }
 }
