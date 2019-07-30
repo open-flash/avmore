@@ -70,15 +70,34 @@ impl<'gc> PartialEq for AvmValue<'gc> {
 }
 
 unsafe impl<'gc> Trace for AvmValue<'gc> {
-  unsafe fn mark(&self) {}
+  unsafe fn mark(&self) {
+    match self {
+      AvmValue::Object(gc) => Gc::mark(gc),
+      AvmValue::String(gc) => Gc::mark(gc),
+      _ => (),
+    }
+  }
 
-  unsafe fn root(&self) {}
+  unsafe fn root(&self) {
+    match self {
+      AvmValue::Object(gc) => Gc::root(gc),
+      AvmValue::String(gc) => Gc::root(gc),
+      _ => (),
+    }
+  }
 
-  unsafe fn unroot(&self) {}
+  unsafe fn unroot(&self) {
+    match self {
+      AvmValue::Object(gc) => Gc::unroot(gc),
+      AvmValue::String(gc) => Gc::unroot(gc),
+      _ => (),
+    }
+  }
 }
 
 impl<'gc> AvmValue<'gc> {
   pub const UNDEFINED: Self = AvmValue::Undefined(AvmUndefined);
+  pub const NULL: Self = AvmValue::Null(AvmNull);
   pub const ZERO: Self = AvmValue::Number(AvmNumber::ZERO);
   pub const ONE: Self = AvmValue::Number(AvmNumber::ONE);
   pub const NAN: Self = AvmValue::Number(AvmNumber::NAN);
@@ -97,17 +116,21 @@ impl<'gc> AvmValue<'gc> {
     }
   }
 
-  pub fn string(gc_scope: &GcScope<'gc>, value: String) -> Result<AvmValue<'gc>, GcAllocErr> {
-    AvmString::new(gc_scope, value).map(|s| AvmValue::String(s))
+  pub fn string(gc: &'gc GcScope<'gc>, value: String) -> Result<AvmValue<'gc>, GcAllocErr> {
+    AvmString::new(gc, value).map(|s| AvmValue::String(s))
+  }
+
+  pub fn boolean(value: bool) -> AvmValue<'gc> {
+    AvmValue::Boolean(AvmBoolean::new(value))
   }
 
   pub fn number(value: f64) -> AvmValue<'gc> {
     AvmValue::Number(AvmNumber::new(value))
   }
 
-  pub fn from_ast(gc_scope: &GcScope<'gc>, value: &avm1::Value) -> Result<AvmValue<'gc>, GcAllocErr> {
+  pub fn from_ast(gc: &'gc GcScope<'gc>, value: &avm1::Value) -> Result<AvmValue<'gc>, GcAllocErr> {
     match value {
-      &avm1::Value::String(ref s) => AvmString::new(gc_scope, s.clone())
+      &avm1::Value::String(ref s) => AvmString::new(gc, s.clone())
         .map(|avm_string| AvmValue::String(avm_string)),
       &avm1::Value::Float64(n) => Ok(AvmValue::Number(AvmNumber::new(n.into()))),
       &avm1::Value::Sint32(n) => Ok(AvmValue::Number(AvmNumber::new(n.into()))),
@@ -115,12 +138,12 @@ impl<'gc> AvmValue<'gc> {
     }
   }
 
-  pub fn to_avm_string(&self, gc_scope: &GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+  pub fn to_avm_string(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
     match self {
-      &AvmValue::Undefined(_) => AvmString::new(gc_scope, String::from(if swf_version >= 7 { "undefined" } else { "" })),
-      &AvmValue::Null(_) => AvmString::new(gc_scope, String::from("null")),
+      &AvmValue::Undefined(_) => AvmString::new(gc, String::from(if swf_version >= 7 { "undefined" } else { "" })),
+      &AvmValue::Null(_) => AvmString::new(gc, String::from("null")),
       &AvmValue::String(ref avm_string) => Ok(Gc::clone(&avm_string)),
-      &AvmValue::Number(ref avm_number) => AvmString::new(gc_scope, format!("{}", avm_number.value())),
+      &AvmValue::Number(ref avm_number) => AvmString::new(gc, format!("{}", avm_number.value())),
       _ => unimplemented!(),
     }
   }

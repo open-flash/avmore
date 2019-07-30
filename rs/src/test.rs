@@ -23,8 +23,9 @@ fn test_avm1(path: &str) {
   let avm1_bytes: Vec<u8> = ::std::fs::read(path).expect("Failed to read AVM1 file");
   let expected_logs: String = ::std::fs::read_to_string(log_path).expect("Failed to read log");
 
+  let gc = GcScope::new();
   let host = LoggedHost::new();
-  let mut vm = Vm::new(&host, 11);
+  let mut vm = Vm::new(&gc, &host, 11);
   let script_id = vm.create_script(avm1_bytes, None, None);
   vm.run_to_completion(script_id);
 

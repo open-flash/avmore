@@ -22,8 +22,8 @@ path = "src/main.rs"
 [dependencies]
 avm1-parser = "^0.7.0"
 avm1-tree = "^0.7.0"
-scoped-gc = "^0.1.3"
-scoped-gc-derive = "^0.1.3"
+scoped-gc = "^0.1.4"
+scoped-gc-derive = "^0.1.4"
 # Force 1.0.97 (instead of latest 1.0.98) to work around NonZeroI* bug in serde
 serde = "=1.0.97"
 serde_derive = "=1.0.97"

@@ -3,15 +3,18 @@ use std::collections::HashMap;
 
 use ::scoped_gc::{Gc, GcRefCell};
 use avm1_tree as avm1;
-use scoped_gc::GcScope;
+use scoped_gc::{GcScope, GcAllocErr};
 
 use crate::host::Host;
-use crate::values::{AvmNumber, AvmObject, AvmString, AvmUndefined, AvmValue};
+use crate::values::{AvmNumber, AvmObject, AvmString, AvmValue};
 
 pub struct Vm<'gc> {
-  gc: GcScope<'gc>,
+  gc: &'gc GcScope<'gc>,
 
   pub swf_version: u8,
+
+  // This is wrong: the pool may be dropped AFTER the GcScope
+  pool: ConstantPool<'gc>,
 
   host: &'gc Host,
 
@@ -20,10 +23,11 @@ pub struct Vm<'gc> {
 }
 
 impl<'gc> Vm<'gc> {
-  pub fn new(host: &'gc Host, swf_version: u8) -> Self {
+  pub fn new(gc: &'gc GcScope<'gc>, host: &'gc Host, swf_version: u8) -> Self {
     Self {
-      gc: GcScope::new(),
+      gc,
       swf_version,
+      pool: ConstantPool::new(),
       host,
       next_script_id: Avm1ScriptId(0),
       scripts_by_id: HashMap::new(),
@@ -88,15 +92,40 @@ pub(crate) struct Avm1Script {
   target: Option<TargetId>,
 }
 
+struct ConstantPool<'gc> (Option<Vec<Gc<'gc, AvmString>>>);
+
+impl<'gc> ConstantPool<'gc> {
+  pub fn new() -> Self {
+    ConstantPool(None)
+  }
+
+  pub fn set(&mut self, pool: Vec<Gc<'gc, AvmString>>) -> () {
+    self.0 = Some(pool);
+  }
+
+  pub fn get(&self, index: u16) -> AvmValue<'gc> {
+    match self.0 {
+      // TODO: Add option to mimic Adobe's uninitialized pool values
+      None => AvmValue::UNDEFINED,
+      Some(ref pool) => {
+        match pool.get(index as usize) {
+          None => AvmValue::UNDEFINED,
+          Some(s) => AvmValue::String(Gc::clone(s)),
+        }
+      }
+    }
+  }
+}
+
 struct Stack<'gc> (Vec<AvmValue<'gc>>);
 
 impl<'gc> Stack<'gc> {
-  pub fn new() -> Stack<'gc> {
+  pub fn new() -> Self {
     Stack(Vec::new())
   }
 
   pub fn pop(&mut self) -> AvmValue<'gc> {
-    self.0.pop().unwrap_or(AvmValue::Undefined(AvmUndefined))
+    self.0.pop().unwrap_or(AvmValue::UNDEFINED)
   }
 
   pub fn push(&mut self, value: AvmValue<'gc>) {
@@ -176,6 +205,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::Add => self.exec_add(),
       &avm1::Action::Add2 => self.exec_add2(),
       &avm1::Action::And => self.exec_and(),
+      &avm1::Action::ConstantPool(ref constant_pool) => self.exec_constant_pool(constant_pool),
       &avm1::Action::Divide => self.exec_divide(),
       &avm1::Action::Equals => self.exec_equals(),
       &avm1::Action::GetMember => self.exec_get_member(),
@@ -231,6 +261,14 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     self.frame.stack.push(AvmValue::legacy_boolean(left != 0f64 && right != 0f64, self.vm.swf_version));
   }
 
+  fn exec_constant_pool(&mut self, constant_pool: &avm1::actions::ConstantPool) -> () {
+    let pool: Vec<Gc<'gc, AvmString>> = constant_pool.constant_pool
+      .iter()
+      .map(|s| AvmString::new(&self.vm.gc, s.clone()).unwrap())
+      .collect();
+    self.vm.pool.set(pool);
+  }
+
   fn exec_divide(&mut self) -> () {
     let right = self.frame.stack.pop().legacy_to_avm_number().value();
     let left = self.frame.stack.pop().legacy_to_avm_number().value();
@@ -263,7 +301,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
 
   fn exec_init_object(&mut self) -> () {
     let property_count: usize = to_usize(self.frame.stack.pop()).unwrap();
-    let obj: Gc<GcRefCell<AvmObject>> = AvmObject::new(&self.vm.gc).unwrap();
+    let obj: Gc<GcRefCell<AvmObject>> = AvmObject::new(self.vm.gc).unwrap();
     for _ in 0..property_count {
       let value: AvmValue = self.frame.stack.pop();
       let key: String = String::from(self.frame.stack.pop().to_avm_string(&self.vm.gc, self.vm.swf_version).unwrap().value());
@@ -300,8 +338,21 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   }
 
   fn exec_push(&mut self, push: &avm1::actions::Push) -> () {
-    for value in &push.values {
-      self.frame.stack.push(AvmValue::from_ast(&self.vm.gc, value).unwrap())
+    for code_value in &push.values {
+      let avm_value: Result<AvmValue<'gc>, GcAllocErr> = match code_value {
+        &avm1::Value::Boolean(b) => Ok(AvmValue::boolean(b)),
+        &avm1::Value::Constant(idx) => Ok(self.vm.pool.get(idx)),
+        &avm1::Value::Float32(x) => Ok(AvmValue::number(x.into())),
+        &avm1::Value::Float64(x) => Ok(AvmValue::number(x.into())),
+        &avm1::Value::Null => Ok(AvmValue::NULL),
+        &avm1::Value::Register(idx) => unimplemented!("Push(register)"),
+        &avm1::Value::Sint32(x) => Ok(AvmValue::number(x.into())),
+        &avm1::Value::String(ref s) => AvmString::new(&self.vm.gc, s.clone())
+          .map(|avm_string| AvmValue::String(avm_string)),
+        &avm1::Value::Undefined => Ok(AvmValue::UNDEFINED),
+      };
+      let avm_value = avm_value.unwrap();
+      self.frame.stack.push(avm_value);
     }
   }
 
