@@ -313,12 +313,16 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   }
 
   fn exec_jump(&mut self, jump: &avm1::actions::Jump) -> () {
-    if jump.offset >= 0 {
-      self.frame.ip.saturating_add(usize::from(jump.offset as u16));
-    } else {
-      // TODO: Handle i16::MIN
-      self.frame.ip.saturating_sub(usize::from((-jump.offset) as u16));
-    }
+    const I16_MIN_SUCCESSOR: i16 = std::i16::MIN + 1;
+
+    // Extend from i16 to i32 to be able to handle i16::MIN
+    let offset = ::std::i16::MIN;
+    let new_offset: usize = match jump.offset {
+      std::i16::MIN => self.frame.ip.saturating_sub(0x8000),
+      x @ I16_MIN_SUCCESSOR..=-1 => self.frame.ip.saturating_sub(usize::from(-x as u16)),
+      x @ 0..=std::i16::MAX => self.frame.ip.saturating_add(usize::from(x as u16)),
+    };
+    self.frame.ip = new_offset;
   }
 
   fn exec_less(&mut self) -> () {

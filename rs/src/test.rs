@@ -33,6 +33,8 @@ fn test_avm1(path: &str) {
   match name {
     "template" => return, // Internal
     "constant-on-stack-definition" => return, // Requires uninitialized constant pool
+    "constant-without-pool" => return, // Requires uninitialized constant pool
+    "corrupted-push" => return, // Requires parser support for corrupted data
     _ => (),
   }
 
