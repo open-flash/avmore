@@ -5,6 +5,7 @@ use ::scoped_gc::{Gc, GcRefCell};
 use avm1_tree as avm1;
 use scoped_gc::{GcAllocErr, GcScope};
 
+use crate::error::{Warning, ReferenceToUndeclaredVariableWarning};
 use crate::host::Host;
 use crate::values::{AvmConvert, AvmNumber, AvmObject, AvmString, AvmValue};
 
@@ -457,7 +458,19 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   fn exec_get_variable(&mut self) -> () {
     let name = self.frame.stack.pop();
     let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
-    let value = self.frame.scope.get(name.value()).unwrap_or(AvmValue::UNDEFINED);
+    let value = self.frame.scope.get(name.value());
+    let value = match value {
+      Some(v) => v,
+      None => {
+        let warning = Warning::ReferenceToUndeclaredVariable(
+          ReferenceToUndeclaredVariableWarning {
+            variable: name.value().to_owned(),
+          },
+        );
+        self.vm.host.warn(&warning);
+        AvmValue::UNDEFINED
+      }
+    };
     self.frame.stack.push(value);
   }
 
