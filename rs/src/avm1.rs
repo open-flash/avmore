@@ -246,7 +246,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::Decrement => unimplemented!("Decrement"),
       &avm1::Action::DefineFunction(_) => unimplemented!("DefineFunction"),
       &avm1::Action::DefineFunction2(_) => unimplemented!("DefineFunction2"),
-      &avm1::Action::DefineLocal => unimplemented!("DefineLocal"),
+      &avm1::Action::DefineLocal => self.exec_define_local(),
       &avm1::Action::DefineLocal2 => unimplemented!("DefineLocal2"),
       &avm1::Action::Delete => unimplemented!("Delete"),
       &avm1::Action::Delete2 => unimplemented!("Delete2"),
@@ -371,6 +371,13 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       .map(|s| AvmString::new(self.vm.gc, s.clone()).unwrap())
       .collect();
     self.vm.pool.set(pool);
+  }
+
+  fn exec_define_local(&mut self) -> () {
+    let value = self.frame.stack.pop();
+    let name = self.frame.stack.pop();
+    let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+    self.frame.scope.set(name.value().to_owned(), value);
   }
 
   fn exec_divide(&mut self) -> () {
