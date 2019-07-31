@@ -293,7 +293,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::Pop => self.exec_pop(),
       &avm1::Action::PrevFrame => unimplemented!("PrevFrame"),
       &avm1::Action::Push(ref push) => self.exec_push(push),
-      &avm1::Action::PushDuplicate => unimplemented!("PushDuplicate"),
+      &avm1::Action::PushDuplicate => self.exec_push_duplicate(),
       &avm1::Action::RandomNumber => unimplemented!("RandomNumber"),
       &avm1::Action::RemoveSprite => unimplemented!("RemoveSprite"),
       &avm1::Action::Return => unimplemented!("Return"),
@@ -511,6 +511,12 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let right = self.frame.stack.pop().legacy_to_avm_number().value();
     let left = self.frame.stack.pop().legacy_to_avm_number().value();
     self.frame.stack.push(AvmValue::Number(AvmNumber::new(left * right)));
+  }
+
+  fn exec_push_duplicate(&mut self) -> () {
+    let value = self.frame.stack.pop();
+    self.frame.stack.push(value.clone());
+    self.frame.stack.push(value);
   }
 
   fn exec_not(&mut self) -> () {
