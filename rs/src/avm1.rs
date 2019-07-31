@@ -6,7 +6,7 @@ use avm1_tree as avm1;
 use scoped_gc::{GcAllocErr, GcScope};
 
 use crate::host::Host;
-use crate::values::{AvmNumber, AvmObject, AvmString, AvmValue};
+use crate::values::{AvmNumber, AvmObject, AvmString, AvmValue, AvmConvert};
 
 pub struct Vm<'gc> {
   gc: &'gc GcScope<'gc>,
@@ -255,7 +255,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::Enumerate => unimplemented!("Enumerate"),
       &avm1::Action::Enumerate2 => unimplemented!("Enumerate2"),
       &avm1::Action::Equals => self.exec_equals(),
-      &avm1::Action::Equals2 => unimplemented!("Equals2"),
+      &avm1::Action::Equals2 => self.exec_equals2(),
       &avm1::Action::Extends => unimplemented!("Extends"),
       &avm1::Action::FsCommand2 => unimplemented!("FsCommand2"),
       &avm1::Action::GetMember => self.exec_get_member(),
@@ -387,6 +387,54 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let right = self.frame.stack.pop().legacy_to_avm_number().value();
     let left = self.frame.stack.pop().legacy_to_avm_number().value();
     self.frame.stack.push(AvmValue::legacy_boolean(left == right, self.vm.swf_version))
+  }
+
+  fn exec_equals2(&mut self) -> () {
+    let right = self.frame.stack.pop();
+    let left = self.frame.stack.pop();
+
+    // Implementation of the AbstractEquals algorithm from ECMA 262-3, section 11.9.3
+    // This implementation removes recursion by handling each type combination manually
+    let result: bool = match (left, right) {
+      (AvmValue::Boolean(l), AvmValue::Boolean(r)) => l.value() == r.value(),
+      (AvmValue::Boolean(_), AvmValue::Null(_)) => false,
+      (AvmValue::Boolean(l), AvmValue::Number(r)) => l.to_avm_number().value() == r.value(),
+      (AvmValue::Boolean(_), AvmValue::Object(_)) => unimplemented!("Boolean == Object"),
+      (AvmValue::Boolean(l), AvmValue::String(r)) => l.to_avm_number().value() == r.to_avm_number().value(),
+      (AvmValue::Boolean(_), AvmValue::Undefined(_)) => false,
+      (AvmValue::Null(_), AvmValue::Boolean(_)) => false,
+      (AvmValue::Null(_), AvmValue::Null(_)) => true,
+      (AvmValue::Null(_), AvmValue::Number(_)) => false,
+      (AvmValue::Null(_), AvmValue::Object(_)) => false,
+      (AvmValue::Null(_), AvmValue::String(_)) => false,
+      (AvmValue::Null(_), AvmValue::Undefined(_)) => true,
+      (AvmValue::Number(l), AvmValue::Boolean(r)) => l.value() == r.to_avm_number().value(),
+      (AvmValue::Number(_), AvmValue::Null(_)) => false,
+      (AvmValue::Number(l), AvmValue::Number(r)) => l.value() == r.value(),
+      (AvmValue::Number(_), AvmValue::Object(_)) => unimplemented!("Number == Object"),
+      (AvmValue::Number(l), AvmValue::String(r)) => l.value() == r.to_avm_number().value(),
+      (AvmValue::Number(_), AvmValue::Undefined(_)) => false,
+      (AvmValue::Object(_), AvmValue::Boolean(_)) => unimplemented!("Object == Boolean"),
+      (AvmValue::Object(_), AvmValue::Null(_)) => false,
+      (AvmValue::Object(_), AvmValue::Number(_)) => unimplemented!("Object == Number"),
+      (AvmValue::Object(_), AvmValue::Object(_)) => unimplemented!("Object == Object"),
+      (AvmValue::Object(_), AvmValue::String(_)) => unimplemented!("Object == String"),
+      (AvmValue::Object(_), AvmValue::Undefined(_)) => false,
+      (AvmValue::String(l), AvmValue::Boolean(r)) => l.to_avm_number().value() == r.to_avm_number().value(),
+      (AvmValue::String(_), AvmValue::Null(_)) => false,
+      (AvmValue::String(l), AvmValue::Number(r)) => l.to_avm_number().value() == r.value(),
+      (AvmValue::String(_), AvmValue::Object(_)) => unimplemented!("String == Object"),
+      (AvmValue::String(l), AvmValue::String(r)) => l.value() == r.value(),
+      (AvmValue::String(_), AvmValue::Undefined(_)) => false,
+      (AvmValue::Undefined(_), AvmValue::Boolean(_)) => false,
+      (AvmValue::Undefined(_), AvmValue::Null(_)) => true,
+      (AvmValue::Undefined(_), AvmValue::Number(_)) => false,
+      (AvmValue::Undefined(_), AvmValue::Object(_)) => false,
+      (AvmValue::Undefined(_), AvmValue::String(_)) => false,
+      (AvmValue::Undefined(_), AvmValue::Undefined(_)) => true,
+    };
+
+    self.frame.stack.push(AvmValue::boolean(result));
   }
 
   fn exec_get_member(&mut self) -> () {

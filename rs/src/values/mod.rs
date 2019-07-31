@@ -6,6 +6,12 @@ use avm1_tree as avm1;
 mod object;
 mod string;
 
+pub trait AvmConvert {
+  // TODO: to_avm_string, to_avm_primitive, etc.
+  fn to_avm_boolean(&self) -> AvmBoolean;
+  fn to_avm_number(&self) -> AvmNumber;
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct AvmUndefined;
 
@@ -30,16 +36,43 @@ impl AvmNumber {
   }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+impl AvmConvert for AvmNumber {
+  fn to_avm_boolean(&self) -> AvmBoolean {
+    AvmBoolean(!(self.0.is_nan() || self.0 == 0f64))
+  }
+
+  fn to_avm_number(&self) -> AvmNumber {
+    self.clone()
+  }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct AvmBoolean(bool);
 
 impl AvmBoolean {
+  const FALSE: Self = AvmBoolean(false);
+  const TRUE: Self = AvmBoolean(true);
+
   pub const fn new(value: bool) -> AvmBoolean {
     AvmBoolean(value)
   }
 
   pub fn value(&self) -> bool {
     self.0
+  }
+}
+
+impl AvmConvert for AvmBoolean {
+  fn to_avm_boolean(&self) -> AvmBoolean {
+    self.clone()
+  }
+
+  fn to_avm_number(&self) -> AvmNumber {
+    if self.0 {
+      AvmNumber::ONE
+    } else {
+      AvmNumber::ZERO
+    }
   }
 }
 
@@ -101,8 +134,8 @@ impl<'gc> AvmValue<'gc> {
   pub const ZERO: Self = AvmValue::Number(AvmNumber::ZERO);
   pub const ONE: Self = AvmValue::Number(AvmNumber::ONE);
   pub const NAN: Self = AvmValue::Number(AvmNumber::NAN);
-  pub const FALSE: Self = AvmValue::Boolean(AvmBoolean(false));
-  pub const TRUE: Self = AvmValue::Boolean(AvmBoolean(true));
+  pub const FALSE: Self = AvmValue::Boolean(AvmBoolean::FALSE);
+  pub const TRUE: Self = AvmValue::Boolean(AvmBoolean::TRUE);
 
   pub fn legacy_boolean(value: bool, swf_version: u8) -> AvmValue<'gc> {
     if swf_version < 5 {
@@ -157,10 +190,9 @@ impl<'gc> AvmValue<'gc> {
     match self {
       &AvmValue::Undefined(_) => AvmNumber::NAN,
       &AvmValue::Null(_) => AvmNumber::ZERO,
-      &AvmValue::Boolean(AvmBoolean(false)) => AvmNumber::ZERO,
-      &AvmValue::Boolean(AvmBoolean(true)) => AvmNumber::ONE,
-      &AvmValue::Number(avm_number) => avm_number,
-      &AvmValue::String(_) => unimplemented!(),
+      &AvmValue::Boolean(ref v) => v.to_avm_number(),
+      &AvmValue::Number(ref v) => v.to_avm_number(),
+      &AvmValue::String(ref v) => v.to_avm_number(),
       &AvmValue::Object(_) => unimplemented!(),
     }
   }
