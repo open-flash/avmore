@@ -121,7 +121,7 @@ impl<'gc> ConstantPool<'gc> {
 
 struct Scope<'ps, 'gc: 'ps> {
   variables: HashMap<String, AvmValue<'gc>>,
-  parent: Option<&'ps Scope<'ps, 'gc>>,
+  parent: Option<&'ps mut Scope<'ps, 'gc>>,
 }
 
 impl<'ps, 'gc: 'ps> Scope<'ps, 'gc> {
@@ -132,8 +132,18 @@ impl<'ps, 'gc: 'ps> Scope<'ps, 'gc> {
     }
   }
 
-  fn set(&mut self, name: String, value: AvmValue<'gc>) -> () {
+  fn set_local(&mut self, name: String, value: AvmValue<'gc>) -> () {
     self.variables.insert(name, value);
+  }
+
+  fn set(&mut self, name: String, value: AvmValue<'gc>) -> () {
+    if self.variables.contains_key(&name) {
+      self.variables.insert(name, value);
+    } else if self.parent.is_some() {
+      unimplemented!("Set variable in parent scope");
+    } else {
+      self.variables.insert(name, value);
+    }
   }
 
   fn get(&mut self, name: &str) -> Option<AvmValue<'gc>> {
@@ -301,7 +311,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::SetProperty => unimplemented!("SetProperty"),
       &avm1::Action::SetTarget(_) => unimplemented!("SetTarget"),
       &avm1::Action::SetTarget2 => unimplemented!("SetTarget2"),
-      &avm1::Action::SetVariable => unimplemented!("SetVariable"),
+      &avm1::Action::SetVariable => self.exec_set_variable(),
       &avm1::Action::StackSwap => unimplemented!("StackSwap"),
       &avm1::Action::StartDrag => unimplemented!("StartDrag"),
       &avm1::Action::Stop => unimplemented!("Stop"),
@@ -378,7 +388,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let value = self.frame.stack.pop();
     let name = self.frame.stack.pop();
     let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
-    self.frame.scope.set(name.value().to_owned(), value);
+    self.frame.scope.set_local(name.value().to_owned(), value);
   }
 
   fn exec_divide(&mut self) -> () {
@@ -551,6 +561,13 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       let avm_value = avm_value.unwrap();
       self.frame.stack.push(avm_value);
     }
+  }
+
+  fn exec_set_variable(&mut self) -> () {
+    let value = self.frame.stack.pop();
+    let name = self.frame.stack.pop();
+    let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+    self.frame.scope.set(name.value().to_owned(), value);
   }
 
   fn exec_strict_equals(&mut self) -> () {
