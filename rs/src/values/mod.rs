@@ -15,8 +15,28 @@ pub trait AvmConvert {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct AvmUndefined;
 
+impl AvmConvert for AvmUndefined {
+  fn to_avm_boolean(&self) -> AvmBoolean {
+    AvmBoolean::FALSE
+  }
+
+  fn to_avm_number(&self) -> AvmNumber {
+    AvmNumber::NAN
+  }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct AvmNull;
+
+impl AvmConvert for AvmNull {
+  fn to_avm_boolean(&self) -> AvmBoolean {
+    AvmBoolean::FALSE
+  }
+
+  fn to_avm_number(&self) -> AvmNumber {
+    AvmNumber::ZERO
+  }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct AvmNumber(f64);
@@ -171,6 +191,17 @@ impl<'gc> AvmValue<'gc> {
     }
   }
 
+  pub fn to_avm_boolean(&self) -> AvmBoolean {
+    match self {
+      &AvmValue::Undefined(ref v) => v.to_avm_boolean(),
+      &AvmValue::Null(ref v) => v.to_avm_boolean(),
+      &AvmValue::Boolean(ref v) => v.to_avm_boolean(),
+      &AvmValue::Number(ref v) => v.to_avm_boolean(),
+      &AvmValue::String(ref v) => v.to_avm_boolean(),
+      &AvmValue::Object(_) => unimplemented!("ToBoolean(Object)"),
+    }
+  }
+
   pub fn to_avm_string(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
     match self {
       &AvmValue::Boolean(AvmBoolean(false)) => AvmString::new(gc, String::from("false")),
@@ -188,12 +219,12 @@ impl<'gc> AvmValue<'gc> {
   /// The conversion follows ES-262-3 section 9.3 ("ToNumber")
   pub fn to_avm_number(&self) -> AvmNumber {
     match self {
-      &AvmValue::Undefined(_) => AvmNumber::NAN,
-      &AvmValue::Null(_) => AvmNumber::ZERO,
+      &AvmValue::Undefined(ref v) => v.to_avm_number(),
+      &AvmValue::Null(ref v) => v.to_avm_number(),
       &AvmValue::Boolean(ref v) => v.to_avm_number(),
       &AvmValue::Number(ref v) => v.to_avm_number(),
       &AvmValue::String(ref v) => v.to_avm_number(),
-      &AvmValue::Object(_) => unimplemented!(),
+      &AvmValue::Object(_) => unimplemented!("ToNumber(Object)"),
     }
   }
 

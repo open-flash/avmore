@@ -6,7 +6,7 @@ use avm1_tree as avm1;
 use scoped_gc::{GcAllocErr, GcScope};
 
 use crate::host::Host;
-use crate::values::{AvmNumber, AvmObject, AvmString, AvmValue, AvmConvert};
+use crate::values::{AvmConvert, AvmNumber, AvmObject, AvmString, AvmValue};
 
 pub struct Vm<'gc> {
   gc: &'gc GcScope<'gc>,
@@ -123,7 +123,7 @@ struct Scope<'ps, 'gc: 'ps> {
   parent: Option<&'ps Scope<'ps, 'gc>>,
 }
 
-impl <'ps, 'gc: 'ps> Scope<'ps, 'gc> {
+impl<'ps, 'gc: 'ps> Scope<'ps, 'gc> {
   fn empty() -> Self {
     Self {
       variables: HashMap::new(),
@@ -268,7 +268,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::GotoFrame2(_) => unimplemented!("GotoFrame2"),
       &avm1::Action::GotoLabel(_) => unimplemented!("GotoLabel"),
       &avm1::Action::Greater => unimplemented!("Greater"),
-      &avm1::Action::If(_) => unimplemented!("If"),
+      &avm1::Action::If(ref action) => self.exec_if(action),
       &avm1::Action::ImplementsOp => unimplemented!("ImplementsOp"),
       &avm1::Action::Increment => unimplemented!("Increment"),
       &avm1::Action::InitArray => self.exec_init_array(),
@@ -454,6 +454,14 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     self.frame.stack.push(value);
   }
 
+  fn exec_if(&mut self, action: &avm1::actions::If) -> () {
+    let test = self.frame.stack.pop();
+    let test = test.to_avm_boolean().value();
+    if test {
+      self.add_to_ip(action.offset)
+    }
+  }
+
   fn exec_init_array(&mut self) -> () {
     unimplemented!()
   }
@@ -470,13 +478,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   }
 
   fn exec_jump(&mut self, jump: &avm1::actions::Jump) -> () {
-    const I16_MIN_SUCCESSOR: i16 = std::i16::MIN + 1;
-    let new_offset: usize = match jump.offset {
-      std::i16::MIN => self.frame.ip.saturating_sub(0x8000),
-      x @ I16_MIN_SUCCESSOR..=-1 => self.frame.ip.saturating_sub(usize::from(-x as u16)),
-      x @ 0..=std::i16::MAX => self.frame.ip.saturating_add(usize::from(x as u16)),
-    };
-    self.frame.ip = new_offset;
+    self.add_to_ip(jump.offset)
   }
 
   fn exec_less(&mut self) -> () {
@@ -573,5 +575,15 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       AvmValue::Undefined(_) => self.vm.host.trace("undefined"),
       avm_value => self.vm.host.trace(avm_value.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value()),
     };
+  }
+
+  fn add_to_ip(&mut self, offset: i16) -> () {
+    const I16_MIN_SUCCESSOR: i16 = std::i16::MIN + 1;
+    let new_ip: usize = match offset {
+      std::i16::MIN => self.frame.ip.saturating_sub(0x8000),
+      x @ I16_MIN_SUCCESSOR..=-1 => self.frame.ip.saturating_sub(usize::from(-x as u16)),
+      x @ 0..=std::i16::MAX => self.frame.ip.saturating_add(usize::from(x as u16)),
+    };
+    self.frame.ip = new_ip;
   }
 }
