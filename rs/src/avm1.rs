@@ -287,7 +287,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::InstanceOf => unimplemented!("InstanceOf"),
       &avm1::Action::Jump(ref jump) => self.exec_jump(jump),
       &avm1::Action::Less => self.exec_less(),
-      &avm1::Action::Less2 => unimplemented!("Less2"),
+      &avm1::Action::Less2 => self.exec_less2(),
       &avm1::Action::MbAsciiToChar => unimplemented!("MbAsciiToChar"),
       &avm1::Action::MbCharToAscii => unimplemented!("MbCharToAscii"),
       &avm1::Action::MbStringExtract => unimplemented!("MbStringExtract"),
@@ -517,6 +517,19 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     self.frame.stack.push(AvmValue::legacy_boolean(left < right, self.vm.swf_version))
   }
 
+  fn exec_less2(&mut self) -> () {
+    let right = self.frame.stack.pop();
+    let left = self.frame.stack.pop();
+
+    // Implementation of the abstract relational comparison algorithm from ECMA 262-3, section 11.8.5
+    let result: bool = match (left, right) {
+      (AvmValue::Number(l), AvmValue::Number(r)) => l.value() < r.value(),
+      _ => unimplemented!("Less2 on non-number values")
+    };
+
+    self.frame.stack.push(AvmValue::boolean(result));
+  }
+
   fn exec_multiply(&mut self) -> () {
     let right = self.frame.stack.pop().legacy_to_avm_number().value();
     let left = self.frame.stack.pop().legacy_to_avm_number().value();
@@ -530,7 +543,9 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   }
 
   fn exec_not(&mut self) -> () {
-    let value = self.frame.stack.pop().legacy_to_avm_number().value();
+    // TODO: Handle SWF5 (ES3) semantics
+    let arg = self.frame.stack.pop();
+    let value = arg.legacy_to_avm_number().value();
     self.frame.stack.push(AvmValue::legacy_boolean(value == 0f64, self.vm.swf_version));
   }
 

@@ -236,6 +236,8 @@ impl<'gc> AvmValue<'gc> {
   pub fn legacy_to_avm_number(&self) -> AvmNumber {
     match self {
       &AvmValue::Number(avm_number) => avm_number,
+      &AvmValue::Boolean(AvmBoolean(false)) => AvmNumber::ZERO,
+      &AvmValue::Boolean(AvmBoolean(true)) => AvmNumber::ONE,
       _ => AvmNumber::ZERO,
     }
   }
