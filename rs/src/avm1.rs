@@ -281,7 +281,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::Greater => unimplemented!("Greater"),
       &avm1::Action::If(ref action) => self.exec_if(action),
       &avm1::Action::ImplementsOp => unimplemented!("ImplementsOp"),
-      &avm1::Action::Increment => unimplemented!("Increment"),
+      &avm1::Action::Increment => self.exec_increment(),
       &avm1::Action::InitArray => self.exec_init_array(),
       &avm1::Action::InitObject => self.exec_init_object(),
       &avm1::Action::InstanceOf => unimplemented!("InstanceOf"),
@@ -490,6 +490,13 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     if test {
       self.add_to_ip(action.offset)
     }
+  }
+
+  fn exec_increment(&mut self) -> () {
+    let arg = self.frame.stack.pop();
+    let arg = arg.to_avm_number().value();
+    let result = AvmValue::number(arg + 1f64);
+    self.frame.stack.push(result)
   }
 
   fn exec_init_array(&mut self) -> () {
