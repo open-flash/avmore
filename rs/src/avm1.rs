@@ -232,7 +232,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::BitURShift => unimplemented!("BitURShift"),
       &avm1::Action::BitXor => unimplemented!("BitXor"),
       &avm1::Action::Call => unimplemented!("Call"),
-      &avm1::Action::CallFunction => unimplemented!("CallFunction"),
+      &avm1::Action::CallFunction => self.exec_call_function(),
       &avm1::Action::CallMethod => unimplemented!("CallMethod"),
       &avm1::Action::CastOp => unimplemented!("CastOp"),
       &avm1::Action::ConstantPool(ref constant_pool) => self.exec_constant_pool(constant_pool),
@@ -358,6 +358,58 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let right = self.frame.stack.pop().legacy_to_avm_number().value();
     let left = self.frame.stack.pop().legacy_to_avm_number().value();
     self.frame.stack.push(AvmValue::legacy_boolean(left != 0f64 && right != 0f64, self.vm.swf_version));
+  }
+
+  fn exec_call_function(&mut self) -> () {
+    let func_name = self.frame.stack.pop();
+    let arg_count = self.frame.stack.pop();
+
+    let func_name = func_name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+    let arg_count = arg_count.to_avm_number();
+
+    if arg_count.value() != 0f64 {
+      unimplemented!("CallFunction with non-zero arg count")
+    }
+
+    let func = self.frame.scope.borrow().get(func_name.value()).unwrap_or(AvmValue::UNDEFINED);
+
+    let result = match func {
+      AvmValue::Object(obj) => {
+        // TODO: Test case with recursive calls and function body setting a member on itself
+        match &obj.borrow().callable {
+          Some(c) => {
+            let frame: CallFrame = CallFrame {
+              code: &c.code,
+              ip: 0,
+              call_result: AvmValue::UNDEFINED,
+              stack: Stack::new(),
+              scope: Gc::clone(&c.scope),
+              parent: Some(&self.frame),
+            };
+
+            let mut ectx = ExecutionContext::new(self.vm, frame);
+
+            const MAX_ACTIONS: usize = 1000;
+            for _ in 0..MAX_ACTIONS {
+              let has_advanced = ectx.next();
+              if !has_advanced {
+                break;
+              }
+            }
+
+            ectx.frame.call_result.clone()
+          },
+          None => {
+            unimplemented!("CallFunction on object without callable")
+          }
+        }
+      },
+      _ => {
+        unimplemented!("CallFunction on non-object")
+      }
+    };
+
+    self.frame.stack.push(result);
   }
 
   fn exec_constant_pool(&mut self, constant_pool: &avm1::actions::ConstantPool) -> () {
