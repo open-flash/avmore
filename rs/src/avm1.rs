@@ -7,7 +7,7 @@ use scoped_gc::{GcAllocErr, GcScope};
 
 use crate::error::{Warning, ReferenceToUndeclaredVariableWarning};
 use crate::host::Host;
-use crate::values::{AvmConvert, AvmNumber, AvmObject, AvmString, AvmValue};
+use crate::values::{AvmConvert, AvmNumber, AvmObject, AvmString, AvmValue, ToPrimitiveHint, AvmPrimitive};
 
 pub struct Vm<'gc> {
   gc: &'gc GcScope<'gc>,
@@ -182,24 +182,6 @@ pub struct ExecutionContext<'ectx, 'gc: 'ectx> {
   frame: CallFrame<'ectx, 'gc>,
 }
 
-enum PreferredType {
-  None,
-  Number,
-  String,
-}
-
-/// Implements ES-262-3 section 9.1 ("ToPrimitive")
-fn to_primitive(value: AvmValue, _preferred_type: PreferredType) -> AvmValue {
-  match value {
-    AvmValue::Undefined(_) => value,
-    AvmValue::Null(_) => value,
-    AvmValue::Boolean(_) => value,
-    AvmValue::Number(_) => value,
-    AvmValue::String(_) => value,
-    AvmValue::Object(_) => unimplemented!(),
-  }
-}
-
 fn to_usize(value: AvmValue) -> Option<usize> {
   match value {
     AvmValue::Number(avm_number) => {
@@ -278,7 +260,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::GotoFrame(_) => unimplemented!("GotoFrame"),
       &avm1::Action::GotoFrame2(_) => unimplemented!("GotoFrame2"),
       &avm1::Action::GotoLabel(_) => unimplemented!("GotoLabel"),
-      &avm1::Action::Greater => unimplemented!("Greater"),
+      &avm1::Action::Greater => self.exec_greater(),
       &avm1::Action::If(ref action) => self.exec_if(action),
       &avm1::Action::ImplementsOp => unimplemented!("ImplementsOp"),
       &avm1::Action::Increment => self.exec_increment(),
@@ -352,10 +334,10 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   fn exec_add2(&mut self) -> () {
     let right = self.frame.stack.pop();
     let left = self.frame.stack.pop();
-    let left = to_primitive(left, PreferredType::None);
-    let right = to_primitive(right, PreferredType::None);
+    let left = left.to_avm_primitive(ToPrimitiveHint::None);
+    let right = right.to_avm_primitive(ToPrimitiveHint::None);
     match (left, right) {
-      (left @ AvmValue::String(_), right) | (left, right @ AvmValue::String(_)) => {
+      (left @ AvmPrimitive::String(_), right) | (left, right @ AvmPrimitive::String(_)) => {
         let left = left.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
         let right = right.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
         let result = format!("{}{}", left.value(), right.value());
@@ -484,6 +466,15 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     self.frame.stack.push(value);
   }
 
+  fn exec_greater(&mut self) -> () {
+    let right = self.frame.stack.pop();
+    let left = self.frame.stack.pop();
+
+    let result = self.abstract_compare(&right, &left).unwrap_or(false);
+
+    self.frame.stack.push(AvmValue::boolean(result));
+  }
+
   fn exec_if(&mut self, action: &avm1::actions::If) -> () {
     let test = self.frame.stack.pop();
     let test = test.to_avm_boolean().value();
@@ -528,11 +519,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let right = self.frame.stack.pop();
     let left = self.frame.stack.pop();
 
-    // Implementation of the abstract relational comparison algorithm from ECMA 262-3, section 11.8.5
-    let result: bool = match (left, right) {
-      (AvmValue::Number(l), AvmValue::Number(r)) => l.value() < r.value(),
-      _ => unimplemented!("Less2 on non-number values")
-    };
+    let result = self.abstract_compare(&left, &right).unwrap_or(false);
 
     self.frame.stack.push(AvmValue::boolean(result));
   }
@@ -650,5 +637,26 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       x @ 0..=std::i16::MAX => self.frame.ip.saturating_add(usize::from(x as u16)),
     };
     self.frame.ip = new_ip;
+  }
+
+  // Implementation of the abstract relational comparison algorithm from ECMA 262-3, section 11.8.5
+  fn abstract_compare(&self, left: &AvmValue, right: &AvmValue) -> Option<bool> {
+    let left = left.to_avm_primitive(ToPrimitiveHint::Number);
+    let right = right.to_avm_primitive(ToPrimitiveHint::Number);
+
+    match (left, right) {
+      (AvmPrimitive::String(l), AvmPrimitive::String(r)) => {
+        unimplemented!("Compare(String, String)")
+      },
+      (left, right) => {
+        let left = left.to_avm_number().value();
+        let right = right.to_avm_number().value();
+        if left.is_nan() || right.is_nan() {
+          None
+        } else {
+          Some(left < right)
+        }
+      }
+    }
   }
 }

@@ -10,6 +10,7 @@ pub trait AvmConvert {
   // TODO: to_avm_string, to_avm_primitive, etc.
   fn to_avm_boolean(&self) -> AvmBoolean;
   fn to_avm_number(&self) -> AvmNumber;
+  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc>;
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -23,6 +24,10 @@ impl AvmConvert for AvmUndefined {
   fn to_avm_number(&self) -> AvmNumber {
     AvmNumber::NAN
   }
+
+  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+    AvmPrimitive::UNDEFINED
+  }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -35,6 +40,10 @@ impl AvmConvert for AvmNull {
 
   fn to_avm_number(&self) -> AvmNumber {
     AvmNumber::ZERO
+  }
+
+  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+    AvmPrimitive::NULL
   }
 }
 
@@ -63,6 +72,10 @@ impl AvmConvert for AvmNumber {
 
   fn to_avm_number(&self) -> AvmNumber {
     self.clone()
+  }
+
+  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+    AvmPrimitive::Number(self.clone())
   }
 }
 
@@ -93,6 +106,10 @@ impl AvmConvert for AvmBoolean {
     } else {
       AvmNumber::ZERO
     }
+  }
+
+  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+    AvmPrimitive::Boolean(self.clone())
   }
 }
 
@@ -239,6 +256,91 @@ impl<'gc> AvmValue<'gc> {
       &AvmValue::Boolean(AvmBoolean(false)) => AvmNumber::ZERO,
       &AvmValue::Boolean(AvmBoolean(true)) => AvmNumber::ONE,
       _ => AvmNumber::ZERO,
+    }
+  }
+
+  pub fn to_avm_primitive(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+    match self {
+      &AvmValue::Undefined(ref v) => v.to_avm_primitive(hint),
+      &AvmValue::Null(ref v) => v.to_avm_primitive(hint),
+      &AvmValue::Boolean(ref v) => v.to_avm_primitive(hint),
+      &AvmValue::Number(ref v) => v.to_avm_primitive(hint),
+      &AvmValue::String(ref v) => v.to_avm_primitive(hint),
+      &AvmValue::Object(_) => unimplemented!("ToPrimitive(Object)"),
+    }
+  }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum ToPrimitiveHint {
+  None,
+  Number,
+  String,
+}
+
+// TODO: Use a single common type with `AvmValue`
+#[derive(Debug, Clone)]
+pub enum AvmPrimitive<'gc> {
+  Boolean(AvmBoolean),
+  Null(AvmNull),
+  Number(AvmNumber),
+  String(Gc<'gc, AvmString>),
+  Undefined(AvmUndefined),
+}
+
+unsafe impl<'gc> Trace for AvmPrimitive<'gc> {
+  unsafe fn mark(&self) {
+    match self {
+      AvmPrimitive::String(gc) => Gc::mark(gc),
+      _ => (),
+    }
+  }
+
+  unsafe fn root(&self) {
+    match self {
+      AvmPrimitive::String(gc) => Gc::root(gc),
+      _ => (),
+    }
+  }
+
+  unsafe fn unroot(&self) {
+    match self {
+      AvmPrimitive::String(gc) => Gc::unroot(gc),
+      _ => (),
+    }
+  }
+}
+
+impl<'gc> AvmPrimitive<'gc> {
+  pub const UNDEFINED: Self = AvmPrimitive::Undefined(AvmUndefined);
+  pub const NULL: Self = AvmPrimitive::Null(AvmNull);
+  pub const ZERO: Self = AvmPrimitive::Number(AvmNumber::ZERO);
+  pub const ONE: Self = AvmPrimitive::Number(AvmNumber::ONE);
+  pub const NAN: Self = AvmPrimitive::Number(AvmNumber::NAN);
+  pub const FALSE: Self = AvmPrimitive::Boolean(AvmBoolean::FALSE);
+  pub const TRUE: Self = AvmPrimitive::Boolean(AvmBoolean::TRUE);
+
+  pub fn to_avm_string(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    match self {
+      &AvmPrimitive::Boolean(AvmBoolean(false)) => AvmString::new(gc, String::from("false")),
+      &AvmPrimitive::Boolean(AvmBoolean(true)) => AvmString::new(gc, String::from("true")),
+      &AvmPrimitive::Undefined(_) => AvmString::new(gc, String::from(if swf_version >= 7 { "undefined" } else { "" })),
+      &AvmPrimitive::Null(_) => AvmString::new(gc, String::from("null")),
+      &AvmPrimitive::String(ref avm_string) => Ok(Gc::clone(avm_string)),
+      &AvmPrimitive::Number(ref avm_number) => AvmString::new(gc, format!("{}", avm_number.value())),
+    }
+  }
+
+  /// Converts the current value to an `AvmNumber` using ES3 rules.
+  ///
+  /// The conversion follows ES-262-3 section 9.3 ("ToNumber")
+  pub fn to_avm_number(&self) -> AvmNumber {
+    match self {
+      &AvmPrimitive::Undefined(ref v) => v.to_avm_number(),
+      &AvmPrimitive::Null(ref v) => v.to_avm_number(),
+      &AvmPrimitive::Boolean(ref v) => v.to_avm_number(),
+      &AvmPrimitive::Number(ref v) => v.to_avm_number(),
+      &AvmPrimitive::String(ref v) => v.to_avm_number(),
     }
   }
 }

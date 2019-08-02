@@ -1,5 +1,5 @@
 use ::scoped_gc::{Gc, GcAllocErr, GcScope};
-use crate::values::{AvmConvert, AvmBoolean, AvmNumber};
+use crate::values::{AvmConvert, AvmBoolean, AvmNumber, ToPrimitiveHint, AvmPrimitive};
 
 #[derive(Debug, Eq, PartialEq, Clone, Trace)]
 pub struct AvmString(String);
@@ -21,5 +21,9 @@ impl AvmConvert for AvmString {
 
   fn to_avm_number(&self) -> AvmNumber {
     unimplemented!("ToNumber(String)")
+  }
+
+  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+    unimplemented!("ToPrimitive(String)")
   }
 }
