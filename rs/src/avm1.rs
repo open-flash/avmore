@@ -8,6 +8,7 @@ use scoped_gc::{GcAllocErr, GcScope};
 use crate::error::{Warning, ReferenceToUndeclaredVariableWarning};
 use crate::host::Host;
 use crate::values::{AvmConvert, AvmNumber, AvmObject, AvmString, AvmValue, ToPrimitiveHint, AvmPrimitive};
+use crate::values::object::AvmFunction;
 
 pub struct Vm<'gc> {
   gc: &'gc GcScope<'gc>,
@@ -54,7 +55,7 @@ impl<'gc> Vm<'gc> {
       ip: 0,
       call_result: AvmValue::UNDEFINED,
       stack: Stack::new(),
-      scope: Scope::empty(),
+      scope: self.gc.alloc(GcRefCell::new(Scope::empty())).unwrap(),
       parent: None,
     };
 
@@ -70,7 +71,7 @@ impl<'gc> Vm<'gc> {
   }
 }
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, Ord, PartialOrd)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, Ord, PartialOrd, Trace)]
 pub struct Avm1ScriptId(usize);
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Hash, Ord, PartialOrd)]
@@ -119,12 +120,13 @@ impl<'gc> ConstantPool<'gc> {
   }
 }
 
-struct Scope<'ps, 'gc: 'ps> {
+#[derive(Debug, Trace)]
+pub struct Scope<'gc> {
   variables: HashMap<String, AvmValue<'gc>>,
-  parent: Option<&'ps mut Scope<'ps, 'gc>>,
+  parent: Option<Gc<'gc, Scope<'gc>>>,
 }
 
-impl<'ps, 'gc: 'ps> Scope<'ps, 'gc> {
+impl<'gc> Scope<'gc> {
   fn empty() -> Self {
     Self {
       variables: HashMap::new(),
@@ -146,7 +148,7 @@ impl<'ps, 'gc: 'ps> Scope<'ps, 'gc> {
     }
   }
 
-  fn get(&mut self, name: &str) -> Option<AvmValue<'gc>> {
+  fn get(&self, name: &str) -> Option<AvmValue<'gc>> {
     self.variables.get(name).map(|v| v.clone())
   }
 }
@@ -173,7 +175,7 @@ pub struct CallFrame<'frame, 'gc: 'frame> {
   ip: usize,
   call_result: AvmValue<'gc>,
   stack: Stack<'gc>,
-  scope: Scope<'frame, 'gc>,
+  scope: Gc<'gc, GcRefCell<Scope<'gc>>>,
   parent: Option<&'frame CallFrame<'frame, 'gc>>,
 }
 
@@ -237,7 +239,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::CharToAscii => unimplemented!("CharToAscii"),
       &avm1::Action::CloneSprite => unimplemented!("CloneSprite"),
       &avm1::Action::Decrement => unimplemented!("Decrement"),
-      &avm1::Action::DefineFunction(_) => unimplemented!("DefineFunction"),
+      &avm1::Action::DefineFunction(ref action) => self.exec_define_function(action),
       &avm1::Action::DefineFunction2(_) => unimplemented!("DefineFunction2"),
       &avm1::Action::DefineLocal => self.exec_define_local(),
       &avm1::Action::DefineLocal2 => unimplemented!("DefineLocal2"),
@@ -366,11 +368,36 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     self.vm.pool.set(pool);
   }
 
+  fn exec_define_function(&mut self, action: &avm1::actions::DefineFunction) -> () {
+    let start = self.frame.ip;
+    let end = start + usize::from(action.body_size);
+    let code = self.frame.code[start..end].to_vec();
+
+    if !action.parameters.is_empty() {
+      unimplemented!("DefineFunction with non-empty `parameters`");
+    }
+
+    let avm_fn = AvmFunction {
+      code,
+      scope: Gc::clone(&self.frame.scope),
+    };
+
+    let avm_obj = AvmObject::new_callable(self.vm.gc, avm_fn).unwrap();
+    let value = AvmValue::Object(avm_obj);
+
+    if !action.name.is_empty() {
+      self.frame.scope.borrow_mut().set_local(action.name.clone(), value.clone());
+    }
+
+    self.frame.stack.push(value);
+    self.frame.ip = end;
+  }
+
   fn exec_define_local(&mut self) -> () {
     let value = self.frame.stack.pop();
     let name = self.frame.stack.pop();
     let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
-    self.frame.scope.set_local(name.value().to_owned(), value);
+    self.frame.scope.borrow_mut().set_local(name.value().to_owned(), value);
   }
 
   fn exec_divide(&mut self) -> () {
@@ -450,7 +477,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   fn exec_get_variable(&mut self) -> () {
     let name = self.frame.stack.pop();
     let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
-    let value = self.frame.scope.get(name.value());
+    let value = self.frame.scope.borrow().get(name.value());
     let value = match value {
       Some(v) => v,
       None => {
@@ -576,7 +603,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let value = self.frame.stack.pop();
     let name = self.frame.stack.pop();
     let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
-    self.frame.scope.set(name.value().to_owned(), value);
+    self.frame.scope.borrow_mut().set(name.value().to_owned(), value);
   }
 
   fn exec_strict_equals(&mut self) -> () {
@@ -645,7 +672,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let right = right.to_avm_primitive(ToPrimitiveHint::Number);
 
     match (left, right) {
-      (AvmPrimitive::String(l), AvmPrimitive::String(r)) => {
+      (AvmPrimitive::String(_l), AvmPrimitive::String(_r)) => {
         unimplemented!("Compare(String, String)")
       },
       (left, right) => {

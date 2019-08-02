@@ -1,9 +1,9 @@
-use ::scoped_gc::{Gc, GcAllocErr, GcRefCell, GcScope, Trace};
+use ::scoped_gc::{Gc, GcAllocErr, GcRefCell, GcScope};
 pub use self::object::AvmObject;
 pub use self::string::AvmString;
 use avm1_tree as avm1;
 
-mod object;
+pub mod object;
 mod string;
 
 pub trait AvmConvert {
@@ -13,7 +13,7 @@ pub trait AvmConvert {
   fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc>;
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Trace)]
 pub struct AvmUndefined;
 
 impl AvmConvert for AvmUndefined {
@@ -25,12 +25,12 @@ impl AvmConvert for AvmUndefined {
     AvmNumber::NAN
   }
 
-  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+  fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
     AvmPrimitive::UNDEFINED
   }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Trace)]
 pub struct AvmNull;
 
 impl AvmConvert for AvmNull {
@@ -42,12 +42,12 @@ impl AvmConvert for AvmNull {
     AvmNumber::ZERO
   }
 
-  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+  fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
     AvmPrimitive::NULL
   }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Trace)]
 pub struct AvmNumber(f64);
 
 impl AvmNumber {
@@ -74,12 +74,12 @@ impl AvmConvert for AvmNumber {
     self.clone()
   }
 
-  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+  fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
     AvmPrimitive::Number(self.clone())
   }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Trace)]
 pub struct AvmBoolean(bool);
 
 impl AvmBoolean {
@@ -108,12 +108,12 @@ impl AvmConvert for AvmBoolean {
     }
   }
 
-  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+  fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
     AvmPrimitive::Boolean(self.clone())
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Trace)]
 pub enum AvmValue<'gc> {
   Boolean(AvmBoolean),
   Null(AvmNull),
@@ -136,32 +136,6 @@ impl<'gc> PartialEq for AvmValue<'gc> {
 
   fn ne(&self, other: &AvmValue<'gc>) -> bool {
     !self.eq(other)
-  }
-}
-
-unsafe impl<'gc> Trace for AvmValue<'gc> {
-  unsafe fn mark(&self) {
-    match self {
-      AvmValue::Object(gc) => Gc::mark(gc),
-      AvmValue::String(gc) => Gc::mark(gc),
-      _ => (),
-    }
-  }
-
-  unsafe fn root(&self) {
-    match self {
-      AvmValue::Object(gc) => Gc::root(gc),
-      AvmValue::String(gc) => Gc::root(gc),
-      _ => (),
-    }
-  }
-
-  unsafe fn unroot(&self) {
-    match self {
-      AvmValue::Object(gc) => Gc::unroot(gc),
-      AvmValue::String(gc) => Gc::unroot(gc),
-      _ => (),
-    }
   }
 }
 
@@ -279,36 +253,13 @@ pub enum ToPrimitiveHint {
 }
 
 // TODO: Use a single common type with `AvmValue`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Trace)]
 pub enum AvmPrimitive<'gc> {
   Boolean(AvmBoolean),
   Null(AvmNull),
   Number(AvmNumber),
   String(Gc<'gc, AvmString>),
   Undefined(AvmUndefined),
-}
-
-unsafe impl<'gc> Trace for AvmPrimitive<'gc> {
-  unsafe fn mark(&self) {
-    match self {
-      AvmPrimitive::String(gc) => Gc::mark(gc),
-      _ => (),
-    }
-  }
-
-  unsafe fn root(&self) {
-    match self {
-      AvmPrimitive::String(gc) => Gc::root(gc),
-      _ => (),
-    }
-  }
-
-  unsafe fn unroot(&self) {
-    match self {
-      AvmPrimitive::String(gc) => Gc::unroot(gc),
-      _ => (),
-    }
-  }
 }
 
 impl<'gc> AvmPrimitive<'gc> {

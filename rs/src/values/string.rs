@@ -23,7 +23,7 @@ impl AvmConvert for AvmString {
     unimplemented!("ToNumber(String)")
   }
 
-  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+  fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
     unimplemented!("ToPrimitive(String)")
   }
 }
