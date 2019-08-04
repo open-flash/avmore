@@ -56,6 +56,7 @@ impl<'gc> Vm<'gc> {
       ip: 0,
       call_result: AvmValue::UNDEFINED,
       stack: Stack::new(),
+      registers: RegisterTable::new(4),
       scope: self.gc.alloc(GcRefCell::new(Scope::empty())).unwrap(),
       parent: None,
     };
@@ -172,8 +173,32 @@ impl<'gc> Stack<'gc> {
     self.0.pop().unwrap_or(AvmValue::UNDEFINED)
   }
 
+  pub fn peek(&mut self) -> AvmValue<'gc> {
+    self.0.last().map(AvmValue::clone).unwrap_or(AvmValue::UNDEFINED)
+  }
+
   pub fn push(&mut self, value: AvmValue<'gc>) {
     self.0.push(value);
+  }
+}
+
+struct RegisterTable<'gc> (Vec<AvmValue<'gc>>);
+
+impl<'gc> RegisterTable<'gc> {
+  pub fn new(size: u8) -> Self {
+    let mut table = Vec::with_capacity(usize::from(size));
+    for _ in 0..size {
+      table.push(AvmValue::UNDEFINED);
+    }
+    RegisterTable(table)
+  }
+
+  pub fn get(&self, index: u8) -> AvmValue<'gc> {
+    self.0[usize::from(index)].clone()
+  }
+
+  pub fn set(&mut self, index: u8, value: AvmValue<'gc>) -> () {
+    self.0[usize::from(index)] = value
   }
 }
 
@@ -183,6 +208,7 @@ pub struct CallFrame<'frame, 'gc: 'frame> {
   ip: usize,
   call_result: AvmValue<'gc>,
   stack: Stack<'gc>,
+  registers: RegisterTable<'gc>,
   scope: Gc<'gc, GcRefCell<Scope<'gc>>>,
   parent: Option<&'frame CallFrame<'frame, 'gc>>,
 }
@@ -308,7 +334,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::StartDrag => unimplemented!("StartDrag"),
       &avm1::Action::Stop => unimplemented!("Stop"),
       &avm1::Action::StopSounds => unimplemented!("StopSounds"),
-      &avm1::Action::StoreRegister(_) => unimplemented!("StoreRegister"),
+      &avm1::Action::StoreRegister(ref action) => self.exec_store_register(action),
       &avm1::Action::StrictEquals => self.exec_strict_equals(),
       &avm1::Action::StringAdd => self.exec_string_add(),
       &avm1::Action::StringEquals => self.exec_string_equals(),
@@ -501,7 +527,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       AvmValue::Object(ref avm_object) => {
         self.frame.stack.push(avm_object.borrow().get(key))
       }
-      _ => unimplemented!(),
+      _ => unimplemented!("GetMember(non-Object)"),
     }
   }
 
@@ -611,15 +637,15 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     self.frame.stack.pop();
   }
 
-  fn exec_push(&mut self, push: &avm1::actions::Push) -> () {
-    for code_value in &push.values {
+  fn exec_push(&mut self, action: &avm1::actions::Push) -> () {
+    for code_value in &action.values {
       let avm_value: Result<AvmValue<'gc>, GcAllocErr> = match code_value {
         &avm1::Value::Boolean(b) => Ok(AvmValue::boolean(b)),
         &avm1::Value::Constant(idx) => Ok(self.vm.pool.get(idx)),
         &avm1::Value::Float32(x) => Ok(AvmValue::number(x.into())),
         &avm1::Value::Float64(x) => Ok(AvmValue::number(x.into())),
         &avm1::Value::Null => Ok(AvmValue::NULL),
-        &avm1::Value::Register(_idx) => unimplemented!("Push(Register)"),
+        &avm1::Value::Register(idx) => Ok(self.frame.registers.get(idx)),
         &avm1::Value::Sint32(x) => Ok(AvmValue::number(x.into())),
         &avm1::Value::String(ref s) => AvmString::new(self.vm.gc, s.clone())
           .map(|avm_string| AvmValue::String(avm_string)),
@@ -635,6 +661,11 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let name = self.frame.stack.pop();
     let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
     self.frame.scope.borrow_mut().set(name.value().to_owned(), value);
+  }
+
+  fn exec_store_register(&mut self, action: &avm1::actions::StoreRegister) -> () {
+    let value = self.frame.stack.peek();
+    self.frame.registers.set(action.register, value);
   }
 
   fn exec_strict_equals(&mut self) -> () {
@@ -743,6 +774,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       ip: 0,
       call_result: AvmValue::UNDEFINED,
       stack: Stack::new(),
+      registers: RegisterTable::new(4),
       scope,
       parent: Some(&self.frame),
     };
