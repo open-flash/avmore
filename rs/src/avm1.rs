@@ -5,6 +5,7 @@ use ::scoped_gc::{Gc, GcRefCell};
 use avm1_tree as avm1;
 use scoped_gc::{GcAllocErr, GcScope};
 
+use crate::context::AvmResult;
 use crate::error::{Warning, ReferenceToUndeclaredVariableWarning};
 use crate::host::Host;
 use crate::values::{AvmConvert, AvmNumber, AvmObject, AvmString, AvmValue, ToPrimitiveHint, AvmPrimitive};
@@ -123,7 +124,7 @@ impl<'gc> ConstantPool<'gc> {
 #[derive(Debug, Trace)]
 pub struct Scope<'gc> {
   variables: HashMap<String, AvmValue<'gc>>,
-  parent: Option<Gc<'gc, Scope<'gc>>>,
+  parent: Option<Gc<'gc, GcRefCell<Scope<'gc>>>>,
 }
 
 impl<'gc> Scope<'gc> {
@@ -131,6 +132,13 @@ impl<'gc> Scope<'gc> {
     Self {
       variables: HashMap::new(),
       parent: None,
+    }
+  }
+
+  fn child(parent: Gc<'gc, GcRefCell<Scope<'gc>>>) -> Self {
+    Self {
+      variables: HashMap::new(),
+      parent: Some(parent),
     }
   }
 
@@ -336,8 +344,8 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   fn exec_add2(&mut self) -> () {
     let right = self.frame.stack.pop();
     let left = self.frame.stack.pop();
-    let left = left.to_avm_primitive(ToPrimitiveHint::None);
-    let right = right.to_avm_primitive(ToPrimitiveHint::None);
+    let left = left.to_avm_primitive(ToPrimitiveHint::Default);
+    let right = right.to_avm_primitive(ToPrimitiveHint::Default);
     match (left, right) {
       (left @ AvmPrimitive::String(_), right) | (left, right @ AvmPrimitive::String(_)) => {
         let left = left.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
@@ -373,40 +381,11 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
 
     let func = self.frame.scope.borrow().get(func_name.value()).unwrap_or(AvmValue::UNDEFINED);
 
-    let result = match func {
-      AvmValue::Object(obj) => {
-        // TODO: Test case with recursive calls and function body setting a member on itself
-        match &obj.borrow().callable {
-          Some(c) => {
-            let frame: CallFrame = CallFrame {
-              code: &c.code,
-              ip: 0,
-              call_result: AvmValue::UNDEFINED,
-              stack: Stack::new(),
-              scope: Gc::clone(&c.scope),
-              parent: Some(&self.frame),
-            };
+    let result = self.apply(func, AvmValue::UNDEFINED, &[]);
 
-            let mut ectx = ExecutionContext::new(self.vm, frame);
-
-            const MAX_ACTIONS: usize = 1000;
-            for _ in 0..MAX_ACTIONS {
-              let has_advanced = ectx.next();
-              if !has_advanced {
-                break;
-              }
-            }
-
-            ectx.frame.call_result.clone()
-          },
-          None => {
-            unimplemented!("CallFunction on object without callable")
-          }
-        }
-      },
-      _ => {
-        unimplemented!("CallFunction on non-object")
-      }
+    let result = match result {
+      Ok(result) => result,
+      Err(_) => unimplemented!("Throw support"),
     };
 
     self.frame.stack.push(result);
@@ -737,5 +716,47 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
         }
       }
     }
+  }
+
+  pub fn apply(&mut self, callable: AvmValue<'gc>, this_arg: AvmValue<'gc>, args: &[AvmValue<'gc>]) -> AvmResult<'gc> {
+    if this_arg != AvmValue::UNDEFINED {
+      unimplemented!("`apply` with non-undefined `this_arg`");
+    }
+    if !args.is_empty() {
+      unimplemented!("`apply` with non-empty `args`");
+    }
+
+    let obj = match callable {
+      AvmValue::Object(obj) => obj,
+      _ => return Err(AvmValue::string(self.vm.gc, String::from("TypeError: `callable` is not an object")).unwrap()),
+    };
+    let (code, scope) = match obj.borrow().callable {
+      Some(ref c) => (c.code.clone(), Gc::clone(&c.scope)),
+      None => return Err(AvmValue::string(self.vm.gc, String::from("TypeError: `callable` is an object with an empty `callable` property")).unwrap()),
+    };
+
+    let scope = Scope::child(scope);
+    let scope = self.vm.gc.alloc(GcRefCell::new(scope)).unwrap();
+
+    let frame: CallFrame = CallFrame {
+      code: &code,
+      ip: 0,
+      call_result: AvmValue::UNDEFINED,
+      stack: Stack::new(),
+      scope,
+      parent: Some(&self.frame),
+    };
+
+    let mut ectx = ExecutionContext::new(self.vm, frame);
+
+    const MAX_ACTIONS: usize = 1000;
+    for _ in 0..MAX_ACTIONS {
+      let has_advanced = ectx.next();
+      if !has_advanced {
+        break;
+      }
+    }
+
+    Ok(ectx.frame.call_result.clone())
   }
 }

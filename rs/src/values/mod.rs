@@ -247,7 +247,7 @@ impl<'gc> AvmValue<'gc> {
 
 #[derive(Debug, Copy, Clone)]
 pub enum ToPrimitiveHint {
-  None,
+  Default,
   Number,
   String,
 }
