@@ -522,13 +522,21 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   }
 
   fn exec_get_member(&mut self) -> () {
-    let key: String = String::from(self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value());
-    match self.frame.stack.pop() {
+    let key = self.frame.stack.pop();
+    let target = self.frame.stack.pop();
+
+    let key: String = String::from(key.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value());
+
+    let result = match target {
+      AvmValue::Null(_) => AvmValue::UNDEFINED,
       AvmValue::Object(ref avm_object) => {
-        self.frame.stack.push(avm_object.borrow().get(key))
-      }
-      _ => unimplemented!("GetMember(non-Object)"),
-    }
+        avm_object.borrow().get(key)
+      },
+      AvmValue::Undefined(_) => AvmValue::UNDEFINED,
+      _ => unimplemented!("GetMember(boxable-primitive)"),
+    };
+
+    self.frame.stack.push(result);
   }
 
   fn exec_get_variable(&mut self) -> () {
