@@ -46,10 +46,9 @@ impl<'gc> AvmObject<'gc> {
     self.properties.insert(key, property);
   }
 
-  pub fn get(&self, key: String) -> AvmValue<'gc> {
-    self.properties.get(&key)
+  pub fn get(&self, key: &str) -> Option<AvmValue<'gc>> {
+    self.properties.get(key)
       .map(|prop| prop.value.clone())
-      .unwrap_or(AvmValue::Undefined(AvmUndefined))
   }
 
   pub fn get_property(&self, key: String) -> Option<AvmObjectProperty<'gc>> {

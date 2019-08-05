@@ -6,7 +6,7 @@ use avm1_tree as avm1;
 use scoped_gc::{GcAllocErr, GcScope};
 
 use crate::context::AvmResult;
-use crate::error::{Warning, ReferenceToUndeclaredVariableWarning};
+use crate::error::{Warning, ReferenceToUndeclaredVariableWarning, TargetHasNoProperty};
 use crate::host::Host;
 use crate::values::{AvmConvert, AvmNumber, AvmObject, AvmString, AvmValue, ToPrimitiveHint, AvmPrimitive};
 use crate::values::object::AvmFunction;
@@ -528,12 +528,26 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let key: String = String::from(key.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value());
 
     let result = match target {
-      AvmValue::Null(_) => AvmValue::UNDEFINED,
+      AvmValue::Null(_) => None,
       AvmValue::Object(ref avm_object) => {
-        avm_object.borrow().get(key)
+        avm_object.borrow().get(&key)
       },
-      AvmValue::Undefined(_) => AvmValue::UNDEFINED,
+      AvmValue::Undefined(_) => None,
       _ => unimplemented!("GetMember(boxable-primitive)"),
+    };
+
+    let result = match result {
+      Some(r) => r,
+      None => {
+        let warning = Warning::TargetHasNoProperty(
+          TargetHasNoProperty {
+            target: String::from("foo"), // TODO: Do not hard-code target name
+            property: key,
+          },
+        );
+        self.vm.host.warn(&warning);
+        AvmValue::UNDEFINED
+      }
     };
 
     self.frame.stack.push(result);
