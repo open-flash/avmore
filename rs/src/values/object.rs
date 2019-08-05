@@ -2,6 +2,7 @@ use ::std::collections::hash_map::HashMap;
 use scoped_gc::{Gc, GcAllocErr, GcRefCell, GcScope};
 use self::super::{AvmUndefined, AvmValue};
 use crate::avm1::Scope;
+use crate::values::AvmString;
 
 #[derive(Debug, Clone, Trace)]
 pub struct AvmObjectProperty<'gc> {
@@ -54,6 +55,11 @@ impl<'gc> AvmObject<'gc> {
   pub fn get_property(&self, key: String) -> Option<AvmObjectProperty<'gc>> {
     self.properties.get(&key).map(|prop| prop.clone())
   }
+
+  pub fn to_avm_string(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    eprintln!("Partial ToString(Object) implementation");
+    AvmString::new(gc, String::from("[object Object]"))
+  }
 }
 
 #[derive(Debug, Trace)]
@@ -67,4 +73,6 @@ pub struct AvmFunction<'gc> {
 
   /// Parent scope
   pub scope: Gc<'gc, GcRefCell<Scope<'gc>>>,
+
+  pub register_count: u8,
 }

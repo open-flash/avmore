@@ -26,4 +26,8 @@ impl AvmConvert for AvmString {
   fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
     unimplemented!("ToPrimitive(String)")
   }
+
+  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    AvmString::new(gc, self.0.clone())
+  }
 }

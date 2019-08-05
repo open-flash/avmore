@@ -7,10 +7,10 @@ pub mod object;
 mod string;
 
 pub trait AvmConvert {
-  // TODO: to_avm_string, to_avm_primitive, etc.
   fn to_avm_boolean(&self) -> AvmBoolean;
   fn to_avm_number(&self) -> AvmNumber;
   fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc>;
+  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr>;
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Trace)]
@@ -28,6 +28,10 @@ impl AvmConvert for AvmUndefined {
   fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
     AvmPrimitive::UNDEFINED
   }
+
+  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    AvmString::new(gc, String::from(if swf_version >= 7 { "undefined" } else { "" }))
+  }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Trace)]
@@ -44,6 +48,10 @@ impl AvmConvert for AvmNull {
 
   fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
     AvmPrimitive::NULL
+  }
+
+  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    AvmString::new(gc, String::from("null"))
   }
 }
 
@@ -76,6 +84,10 @@ impl AvmConvert for AvmNumber {
 
   fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
     AvmPrimitive::Number(self.clone())
+  }
+
+  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    AvmString::new(gc, format!("{}", self.0))
   }
 }
 
@@ -110,6 +122,10 @@ impl AvmConvert for AvmBoolean {
 
   fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
     AvmPrimitive::Boolean(self.clone())
+  }
+
+  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    AvmString::new(gc, String::from(if self.0 { "true" } else { "false" }))
   }
 }
 
@@ -195,13 +211,12 @@ impl<'gc> AvmValue<'gc> {
 
   pub fn to_avm_string(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
     match self {
-      &AvmValue::Boolean(AvmBoolean(false)) => AvmString::new(gc, String::from("false")),
-      &AvmValue::Boolean(AvmBoolean(true)) => AvmString::new(gc, String::from("true")),
-      &AvmValue::Undefined(_) => AvmString::new(gc, String::from(if swf_version >= 7 { "undefined" } else { "" })),
-      &AvmValue::Null(_) => AvmString::new(gc, String::from("null")),
-      &AvmValue::String(ref avm_string) => Ok(Gc::clone(avm_string)),
-      &AvmValue::Number(ref avm_number) => AvmString::new(gc, format!("{}", avm_number.value())),
-      _ => unimplemented!(),
+      &AvmValue::Undefined(ref v) => v.to_avm_string(gc, swf_version),
+      &AvmValue::Null(ref v) => v.to_avm_string(gc, swf_version),
+      &AvmValue::Boolean(ref v) => v.to_avm_string(gc, swf_version),
+      &AvmValue::Number(ref v) => v.to_avm_string(gc, swf_version),
+      &AvmValue::String(ref v) => v.to_avm_string(gc, swf_version),
+      &AvmValue::Object(ref v) => v.borrow().to_avm_string(gc, swf_version),
     }
   }
 

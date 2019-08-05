@@ -54,6 +54,7 @@ impl<'gc> Vm<'gc> {
     let frame: CallFrame = CallFrame {
       code: &script.code,
       ip: 0,
+      this: AvmValue::UNDEFINED,
       call_result: AvmValue::UNDEFINED,
       stack: Stack::new(),
       registers: RegisterTable::new(4),
@@ -206,6 +207,7 @@ pub struct CallFrame<'frame, 'gc: 'frame> {
   code: &'frame [u8],
   // Instruction pointer
   ip: usize,
+  this: AvmValue<'gc>,
   call_result: AvmValue<'gc>,
   stack: Stack<'gc>,
   registers: RegisterTable<'gc>,
@@ -274,7 +276,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::CloneSprite => unimplemented!("CloneSprite"),
       &avm1::Action::Decrement => unimplemented!("Decrement"),
       &avm1::Action::DefineFunction(ref action) => self.exec_define_function(action),
-      &avm1::Action::DefineFunction2(_) => unimplemented!("DefineFunction2"),
+      &avm1::Action::DefineFunction2(ref action) => self.exec_define_function2(action),
       &avm1::Action::DefineLocal => self.exec_define_local(),
       &avm1::Action::DefineLocal2 => unimplemented!("DefineLocal2"),
       &avm1::Action::Delete => unimplemented!("Delete"),
@@ -313,7 +315,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       &avm1::Action::Modulo => unimplemented!("Modulo"),
       &avm1::Action::Multiply => self.exec_multiply(),
       &avm1::Action::NewMethod => unimplemented!("NewMethod"),
-      &avm1::Action::NewObject => unimplemented!("NewObject"),
+      &avm1::Action::NewObject => self.exec_new_object(),
       &avm1::Action::NextFrame => unimplemented!("NextFrame"),
       &avm1::Action::Not => self.exec_not(),
       &avm1::Action::Or => self.exec_or(),
@@ -437,6 +439,45 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let avm_fn = AvmFunction {
       code,
       scope: Gc::clone(&self.frame.scope),
+      register_count: 4,
+    };
+
+    let avm_obj = AvmObject::new_callable(self.vm.gc, avm_fn).unwrap();
+    let value = AvmValue::Object(avm_obj);
+
+    if !action.name.is_empty() {
+      self.frame.scope.borrow_mut().set_local(action.name.clone(), value.clone());
+    }
+
+    self.frame.stack.push(value);
+    self.frame.ip = end;
+  }
+
+  fn exec_define_function2(&mut self, action: &avm1::actions::DefineFunction2) -> () {
+    let start = self.frame.ip;
+    let end = start + usize::from(action.body_size);
+    let code = self.frame.code[start..end].to_vec();
+
+    if !action.parameters.is_empty() {
+      unimplemented!("DefineFunction2 with non-empty `parameters`");
+    }
+
+    if action.preload_this
+      || action.suppress_this
+      || action.preload_arguments
+      || action.suppress_arguments
+      || action.preload_super
+      || action.suppress_super
+      || action.preload_root
+      || action.preload_parent
+      || action.preload_global {
+      unimplemented!("DefineFunction2 with register flags");
+    }
+
+    let avm_fn = AvmFunction {
+      code,
+      scope: Gc::clone(&self.frame.scope),
+      register_count: action.register_count as u8,
     };
 
     let avm_obj = AvmObject::new_callable(self.vm.gc, avm_fn).unwrap();
@@ -636,6 +677,32 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     self.frame.stack.push(AvmValue::Number(AvmNumber::new(left * right)));
   }
 
+  fn exec_new_object(&mut self) -> () {
+    let ctr_name = self.frame.stack.pop();
+    let arg_count = self.frame.stack.pop();
+
+    let ctr_name = ctr_name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+    let arg_count = arg_count.to_avm_number();
+
+    if arg_count.value() != 0f64 {
+      unimplemented!("NewObject with non-zero arg count")
+    }
+
+    let ctr = self.frame.scope.borrow().get(ctr_name.value()).unwrap_or(AvmValue::UNDEFINED);
+    let this_arg: AvmValue = AvmValue::Object(AvmObject::new(self.vm.gc).unwrap());
+
+    let result = self.apply(ctr, this_arg.clone(), &[]);
+
+    match result {
+      Ok(result) => {
+        // Discard result
+      },
+      Err(_) => unimplemented!("Throw support"),
+    };
+
+    self.frame.stack.push(this_arg);
+  }
+
   fn exec_push_duplicate(&mut self) -> () {
     let value = self.frame.stack.pop();
     self.frame.stack.push(value.clone());
@@ -772,9 +839,6 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   }
 
   pub fn apply(&mut self, callable: AvmValue<'gc>, this_arg: AvmValue<'gc>, args: &[AvmValue<'gc>]) -> AvmResult<'gc> {
-    if this_arg != AvmValue::UNDEFINED {
-      unimplemented!("`apply` with non-undefined `this_arg`");
-    }
     if !args.is_empty() {
       unimplemented!("`apply` with non-empty `args`");
     }
@@ -794,6 +858,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let frame: CallFrame = CallFrame {
       code: &code,
       ip: 0,
+      this: this_arg,
       call_result: AvmValue::UNDEFINED,
       stack: Stack::new(),
       registers: RegisterTable::new(4),
