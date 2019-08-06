@@ -1,22 +1,27 @@
+use std::convert::TryFrom;
+
 use ::scoped_gc::{Gc, GcAllocErr, GcRefCell, GcScope};
+use avm1_tree as avm1;
+
 pub use self::object::AvmObject;
 pub use self::string::AvmString;
-use avm1_tree as avm1;
+use crate::context::Context;
+use crate::values::object::AvmObjectRef;
 
 pub mod object;
 mod string;
 
-pub trait AvmConvert {
+pub trait AvmConvert<'gc> {
   fn to_avm_boolean(&self) -> AvmBoolean;
   fn to_avm_number(&self) -> AvmNumber;
-  fn to_avm_primitive<'gc>(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc>;
-  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr>;
+  fn to_avm_primitive<C: Context<'gc>>(&self, ctx: &mut C, hint: ToPrimitiveHint) -> Result<AvmPrimitive<'gc>, ()>;
+  fn to_avm_string<C: Context<'gc>>(&self, ctx: &mut C) -> Result<Gc<'gc, AvmString>, GcAllocErr>;
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Trace)]
 pub struct AvmUndefined;
 
-impl AvmConvert for AvmUndefined {
+impl<'gc> AvmConvert<'gc> for AvmUndefined {
   fn to_avm_boolean(&self) -> AvmBoolean {
     AvmBoolean::FALSE
   }
@@ -25,19 +30,19 @@ impl AvmConvert for AvmUndefined {
     AvmNumber::NAN
   }
 
-  fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
-    AvmPrimitive::UNDEFINED
+  fn to_avm_primitive<C: Context<'gc>>(&self, _: &mut C, _: ToPrimitiveHint) -> Result<AvmPrimitive<'gc>, ()> {
+    Ok(AvmPrimitive::UNDEFINED)
   }
 
-  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
-    AvmString::new(gc, String::from(if swf_version >= 7 { "undefined" } else { "" }))
+  fn to_avm_string<C: Context<'gc>>(&self, ctx: &mut C) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    ctx.string(String::from(if ctx.swf_version() >= 7 { "undefined" } else { "" }))
   }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Trace)]
 pub struct AvmNull;
 
-impl AvmConvert for AvmNull {
+impl<'gc> AvmConvert<'gc> for AvmNull {
   fn to_avm_boolean(&self) -> AvmBoolean {
     AvmBoolean::FALSE
   }
@@ -46,12 +51,12 @@ impl AvmConvert for AvmNull {
     AvmNumber::ZERO
   }
 
-  fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
-    AvmPrimitive::NULL
+  fn to_avm_primitive<C: Context<'gc>>(&self, _: &mut C, _: ToPrimitiveHint) -> Result<AvmPrimitive<'gc>, ()> {
+    Ok(AvmPrimitive::NULL)
   }
 
-  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
-    AvmString::new(gc, String::from("null"))
+  fn to_avm_string<C: Context<'gc>>(&self, ctx: &mut C) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    ctx.string(String::from("null"))
   }
 }
 
@@ -73,7 +78,7 @@ impl AvmNumber {
   }
 }
 
-impl AvmConvert for AvmNumber {
+impl<'gc> AvmConvert<'gc> for AvmNumber {
   fn to_avm_boolean(&self) -> AvmBoolean {
     AvmBoolean(!(self.0.is_nan() || self.0 == 0f64))
   }
@@ -82,12 +87,12 @@ impl AvmConvert for AvmNumber {
     self.clone()
   }
 
-  fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
-    AvmPrimitive::Number(self.clone())
+  fn to_avm_primitive<C: Context<'gc>>(&self, _: &mut C, _: ToPrimitiveHint) -> Result<AvmPrimitive<'gc>, ()> {
+    Ok(AvmPrimitive::Number(self.clone()))
   }
 
-  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
-    AvmString::new(gc, format!("{}", self.0))
+  fn to_avm_string<C: Context<'gc>>(&self, ctx: &mut C) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    ctx.string(format!("{}", self.0))
   }
 }
 
@@ -107,7 +112,7 @@ impl AvmBoolean {
   }
 }
 
-impl AvmConvert for AvmBoolean {
+impl<'gc> AvmConvert<'gc> for AvmBoolean {
   fn to_avm_boolean(&self) -> AvmBoolean {
     self.clone()
   }
@@ -120,12 +125,12 @@ impl AvmConvert for AvmBoolean {
     }
   }
 
-  fn to_avm_primitive<'gc>(&self, _: ToPrimitiveHint) -> AvmPrimitive<'gc> {
-    AvmPrimitive::Boolean(self.clone())
+  fn to_avm_primitive<C: Context<'gc>>(&self, _: &mut C, _: ToPrimitiveHint) -> Result<AvmPrimitive<'gc>, ()> {
+    Ok(AvmPrimitive::Boolean(self.clone()))
   }
 
-  fn to_avm_string<'gc>(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
-    AvmString::new(gc, String::from(if self.0 { "true" } else { "false" }))
+  fn to_avm_string<C: Context<'gc>>(&self, ctx: &mut C) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+    ctx.string(String::from(if self.0 { "true" } else { "false" }))
   }
 }
 
@@ -134,7 +139,7 @@ pub enum AvmValue<'gc> {
   Boolean(AvmBoolean),
   Null(AvmNull),
   Number(AvmNumber),
-  Object(Gc<'gc, GcRefCell<AvmObject<'gc>>>),
+  Object(AvmObjectRef<'gc>),
   String(Gc<'gc, AvmString>),
   Undefined(AvmUndefined),
 }
@@ -209,14 +214,14 @@ impl<'gc> AvmValue<'gc> {
     }
   }
 
-  pub fn to_avm_string(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+  pub fn to_avm_string<C: Context<'gc>>(&self, ctx: &mut C) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
     match self {
-      &AvmValue::Undefined(ref v) => v.to_avm_string(gc, swf_version),
-      &AvmValue::Null(ref v) => v.to_avm_string(gc, swf_version),
-      &AvmValue::Boolean(ref v) => v.to_avm_string(gc, swf_version),
-      &AvmValue::Number(ref v) => v.to_avm_string(gc, swf_version),
-      &AvmValue::String(ref v) => v.to_avm_string(gc, swf_version),
-      &AvmValue::Object(ref v) => v.borrow().to_avm_string(gc, swf_version),
+      &AvmValue::Undefined(ref v) => v.to_avm_string(ctx),
+      &AvmValue::Null(ref v) => v.to_avm_string(ctx),
+      &AvmValue::Boolean(ref v) => v.to_avm_string(ctx),
+      &AvmValue::Number(ref v) => v.to_avm_string(ctx),
+      &AvmValue::String(ref v) => v.to_avm_string(ctx),
+      &AvmValue::Object(ref v) => v.to_avm_string(ctx),
     }
   }
 
@@ -248,13 +253,13 @@ impl<'gc> AvmValue<'gc> {
     }
   }
 
-  pub fn to_avm_primitive(&self, hint: ToPrimitiveHint) -> AvmPrimitive<'gc> {
+  pub fn to_avm_primitive<C: Context<'gc>>(&self, ctx: &mut C, hint: ToPrimitiveHint) -> Result<AvmPrimitive<'gc>, ()> {
     match self {
-      &AvmValue::Undefined(ref v) => v.to_avm_primitive(hint),
-      &AvmValue::Null(ref v) => v.to_avm_primitive(hint),
-      &AvmValue::Boolean(ref v) => v.to_avm_primitive(hint),
-      &AvmValue::Number(ref v) => v.to_avm_primitive(hint),
-      &AvmValue::String(ref v) => v.to_avm_primitive(hint),
+      &AvmValue::Undefined(ref v) => v.to_avm_primitive(ctx, hint),
+      &AvmValue::Null(ref v) => v.to_avm_primitive(ctx, hint),
+      &AvmValue::Boolean(ref v) => v.to_avm_primitive(ctx, hint),
+      &AvmValue::Number(ref v) => v.to_avm_primitive(ctx, hint),
+      &AvmValue::String(ref v) => v.to_avm_primitive(ctx, hint),
       &AvmValue::Object(_) => unimplemented!("ToPrimitive(Object)"),
     }
   }
@@ -286,14 +291,13 @@ impl<'gc> AvmPrimitive<'gc> {
   pub const FALSE: Self = AvmPrimitive::Boolean(AvmBoolean::FALSE);
   pub const TRUE: Self = AvmPrimitive::Boolean(AvmBoolean::TRUE);
 
-  pub fn to_avm_string(&self, gc: &'gc GcScope<'gc>, swf_version: u8) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
+  pub fn to_avm_string<C: Context<'gc>>(&self, ctx: &mut C) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
     match self {
-      &AvmPrimitive::Boolean(AvmBoolean(false)) => AvmString::new(gc, String::from("false")),
-      &AvmPrimitive::Boolean(AvmBoolean(true)) => AvmString::new(gc, String::from("true")),
-      &AvmPrimitive::Undefined(_) => AvmString::new(gc, String::from(if swf_version >= 7 { "undefined" } else { "" })),
-      &AvmPrimitive::Null(_) => AvmString::new(gc, String::from("null")),
-      &AvmPrimitive::String(ref avm_string) => Ok(Gc::clone(avm_string)),
-      &AvmPrimitive::Number(ref avm_number) => AvmString::new(gc, format!("{}", avm_number.value())),
+      &AvmPrimitive::Undefined(ref v) => v.to_avm_string(ctx),
+      &AvmPrimitive::Null(ref v) => v.to_avm_string(ctx),
+      &AvmPrimitive::Boolean(ref v) => v.to_avm_string(ctx),
+      &AvmPrimitive::Number(ref v) => v.to_avm_string(ctx),
+      &AvmPrimitive::String(ref v) => v.to_avm_string(ctx),
     }
   }
 
@@ -307,6 +311,21 @@ impl<'gc> AvmPrimitive<'gc> {
       &AvmPrimitive::Boolean(ref v) => v.to_avm_number(),
       &AvmPrimitive::Number(ref v) => v.to_avm_number(),
       &AvmPrimitive::String(ref v) => v.to_avm_number(),
+    }
+  }
+}
+
+impl<'gc> TryFrom<AvmValue<'gc>> for AvmPrimitive<'gc> {
+  type Error = ();
+
+  fn try_from(value: AvmValue<'gc>) -> Result<Self, Self::Error> {
+    match value {
+      AvmValue::Undefined(v) => Ok(AvmPrimitive::Undefined(v)),
+      AvmValue::Null(v) => Ok(AvmPrimitive::Null(v)),
+      AvmValue::Boolean(v) => Ok(AvmPrimitive::Boolean(v)),
+      AvmValue::Number(v) => Ok(AvmPrimitive::Number(v)),
+      AvmValue::String(v) => Ok(AvmPrimitive::String(v)),
+      AvmValue::Object(v) => Err(()),
     }
   }
 }

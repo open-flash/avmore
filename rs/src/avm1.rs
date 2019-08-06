@@ -1,15 +1,16 @@
 use ::std::usize;
 use std::collections::HashMap;
+use std::ops::RangeInclusive;
 
 use ::scoped_gc::{Gc, GcRefCell};
 use avm1_tree as avm1;
 use scoped_gc::{GcAllocErr, GcScope};
 
-use crate::context::AvmResult;
-use crate::error::{Warning, ReferenceToUndeclaredVariableWarning, TargetHasNoProperty};
+use crate::context::{AvmResult, FunctionContext};
+use crate::error::{ReferenceToUndeclaredVariableWarning, TargetHasNoProperty, Warning};
 use crate::host::Host;
-use crate::values::{AvmConvert, AvmNumber, AvmObject, AvmString, AvmValue, ToPrimitiveHint, AvmPrimitive};
-use crate::values::object::AvmFunction;
+use crate::values::{AvmConvert, AvmNumber, AvmObject, AvmPrimitive, AvmString, AvmValue, ToPrimitiveHint};
+use crate::values::object::{AvmFunction, AvmObjectRef};
 
 pub struct Vm<'gc> {
   gc: &'gc GcScope<'gc>,
@@ -372,12 +373,12 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   fn exec_add2(&mut self) -> () {
     let right = self.frame.stack.pop();
     let left = self.frame.stack.pop();
-    let left = left.to_avm_primitive(ToPrimitiveHint::Default);
-    let right = right.to_avm_primitive(ToPrimitiveHint::Default);
+    let left = left.to_avm_primitive(&mut self.as_function_context(), ToPrimitiveHint::Default).unwrap();
+    let right = right.to_avm_primitive(&mut self.as_function_context(), ToPrimitiveHint::Default).unwrap();
     match (left, right) {
       (left @ AvmPrimitive::String(_), right) | (left, right @ AvmPrimitive::String(_)) => {
-        let left = left.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
-        let right = right.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+        let left = left.to_avm_string(&mut self.as_function_context()).unwrap();
+        let right = right.to_avm_string(&mut self.as_function_context()).unwrap();
         let result = format!("{}{}", left.value(), right.value());
         self.frame.stack.push(AvmValue::String(AvmString::new(self.vm.gc, result).unwrap()));
       }
@@ -400,7 +401,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let func_name = self.frame.stack.pop();
     let arg_count = self.frame.stack.pop();
 
-    let func_name = func_name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+    let func_name = func_name.to_avm_string(&mut self.as_function_context()).unwrap();
     let arg_count = arg_count.to_avm_number();
 
     if arg_count.value() != 0f64 {
@@ -494,7 +495,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   fn exec_define_local(&mut self) -> () {
     let value = self.frame.stack.pop();
     let name = self.frame.stack.pop();
-    let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+    let name = name.to_avm_string(&mut self.as_function_context()).unwrap();
     self.frame.scope.borrow_mut().set_local(name.value().to_owned(), value);
   }
 
@@ -566,13 +567,13 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let key = self.frame.stack.pop();
     let target = self.frame.stack.pop();
 
-    let key: String = String::from(key.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value());
+    let key: String = String::from(key.to_avm_string(&mut self.as_function_context()).unwrap().value());
 
     let result = match target {
       AvmValue::Null(_) => None,
       AvmValue::Object(ref avm_object) => {
-        avm_object.borrow().get(&key)
-      },
+        avm_object.0.borrow().get(&key)
+      }
       AvmValue::Undefined(_) => None,
       _ => unimplemented!("GetMember(boxable-primitive)"),
     };
@@ -596,7 +597,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
 
   fn exec_get_variable(&mut self) -> () {
     let name = self.frame.stack.pop();
-    let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+    let name = name.to_avm_string(&mut self.as_function_context()).unwrap();
     let value = self.frame.scope.borrow().get(name.value());
     let value = match value {
       Some(v) => v,
@@ -643,11 +644,11 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
 
   fn exec_init_object(&mut self) -> () {
     let property_count: usize = to_usize(self.frame.stack.pop()).unwrap();
-    let obj: Gc<GcRefCell<AvmObject>> = AvmObject::new(self.vm.gc).unwrap();
+    let obj: AvmObjectRef = AvmObject::new(self.vm.gc).unwrap();
     for _ in 0..property_count {
       let value: AvmValue = self.frame.stack.pop();
-      let key: String = String::from(self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value());
-      obj.borrow_mut().set(key, value);
+      let key: String = String::from(self.frame.stack.pop().to_avm_string(&mut self.as_function_context()).unwrap().value());
+      obj.0.borrow_mut().set(key, value);
     }
     self.frame.stack.push(AvmValue::Object(obj))
   }
@@ -681,7 +682,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     let ctr_name = self.frame.stack.pop();
     let arg_count = self.frame.stack.pop();
 
-    let ctr_name = ctr_name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+    let ctr_name = ctr_name.to_avm_string(&mut self.as_function_context()).unwrap();
     let arg_count = arg_count.to_avm_number();
 
     if arg_count.value() != 0f64 {
@@ -696,7 +697,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     match result {
       Ok(result) => {
         // Discard result
-      },
+      }
       Err(_) => unimplemented!("Throw support"),
     };
 
@@ -748,7 +749,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   fn exec_set_variable(&mut self) -> () {
     let value = self.frame.stack.pop();
     let name = self.frame.stack.pop();
-    let name = name.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap();
+    let name = name.to_avm_string(&mut self.as_function_context()).unwrap();
     self.frame.scope.borrow_mut().set(name.value().to_owned(), value);
   }
 
@@ -775,20 +776,20 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
   }
 
   fn exec_string_add(&mut self) -> () {
-    let right = self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
-    let left = self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    let right = self.frame.stack.pop().to_avm_string(&mut self.as_function_context()).unwrap().value().to_string();
+    let left = self.frame.stack.pop().to_avm_string(&mut self.as_function_context()).unwrap().value().to_string();
     self.frame.stack.push(AvmValue::string(self.vm.gc, format!("{}{}", left, right)).unwrap());
   }
 
   fn exec_string_equals(&mut self) -> () {
-    let right = self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
-    let left = self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    let right = self.frame.stack.pop().to_avm_string(&mut self.as_function_context()).unwrap().value().to_string();
+    let left = self.frame.stack.pop().to_avm_string(&mut self.as_function_context()).unwrap().value().to_string();
     let result = left == right;
     self.frame.stack.push(AvmValue::legacy_boolean(result, self.vm.swf_version));
   }
 
   fn exec_string_length(&mut self) -> () {
-    let value = self.frame.stack.pop().to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value().to_string();
+    let value = self.frame.stack.pop().to_avm_string(&mut self.as_function_context()).unwrap().value().to_string();
     // TODO: Checked conversion
     self.frame.stack.push(AvmValue::number(value.len() as f64));
   }
@@ -803,29 +804,29 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     // `undefined` is always `undefined` when passed to `trace`, even for swf_version < 7.
     match self.frame.stack.pop() {
       AvmValue::Undefined(_) => self.vm.host.trace("undefined"),
-      avm_value => self.vm.host.trace(avm_value.to_avm_string(self.vm.gc, self.vm.swf_version).unwrap().value()),
+      avm_value => self.vm.host.trace(avm_value.to_avm_string(&mut self.as_function_context()).unwrap().value()),
     };
   }
 
   fn add_to_ip(&mut self, offset: i16) -> () {
-    const I16_MIN_SUCCESSOR: i16 = std::i16::MIN + 1;
+    // static I16_MIN_SUCCESSOR: i16 = std::i16::MIN + 1; // -0x7fff
     let new_ip: usize = match offset {
       std::i16::MIN => self.frame.ip.saturating_sub(0x8000),
-      x @ I16_MIN_SUCCESSOR..=-1 => self.frame.ip.saturating_sub(usize::from(-x as u16)),
+      x @ -0x7fff..=-1 => self.frame.ip.saturating_sub(usize::from(-x as u16)),
       x @ 0..=std::i16::MAX => self.frame.ip.saturating_add(usize::from(x as u16)),
     };
     self.frame.ip = new_ip;
   }
 
   // Implementation of the abstract relational comparison algorithm from ECMA 262-3, section 11.8.5
-  fn abstract_compare(&self, left: &AvmValue, right: &AvmValue) -> Option<bool> {
-    let left = left.to_avm_primitive(ToPrimitiveHint::Number);
-    let right = right.to_avm_primitive(ToPrimitiveHint::Number);
+  fn abstract_compare(&mut self, left: &AvmValue<'gc>, right: &AvmValue<'gc>) -> Option<bool> {
+    let left = left.to_avm_primitive(&mut self.as_function_context(), ToPrimitiveHint::Number).unwrap();
+    let right = right.to_avm_primitive(&mut self.as_function_context(), ToPrimitiveHint::Number).unwrap();
 
     match (left, right) {
       (AvmPrimitive::String(_l), AvmPrimitive::String(_r)) => {
         unimplemented!("Compare(String, String)")
-      },
+      }
       (left, right) => {
         let left = left.to_avm_number().value();
         let right = right.to_avm_number().value();
@@ -847,7 +848,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       AvmValue::Object(obj) => obj,
       _ => return Err(AvmValue::string(self.vm.gc, String::from("TypeError: `callable` is not an object")).unwrap()),
     };
-    let (code, scope) = match obj.borrow().callable {
+    let (code, scope) = match obj.0.borrow().callable {
       Some(ref c) => (c.code.clone(), Gc::clone(&c.scope)),
       None => return Err(AvmValue::string(self.vm.gc, String::from("TypeError: `callable` is an object with an empty `callable` property")).unwrap()),
     };
@@ -877,5 +878,12 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     }
 
     Ok(ectx.frame.call_result.clone())
+  }
+
+  pub(crate) fn as_function_context(&mut self) -> FunctionContext<'gc> {
+    FunctionContext {
+      gc: self.vm.gc,
+      _swf_version: self.vm.swf_version,
+    }
   }
 }
