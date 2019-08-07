@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use ::scoped_gc::{Gc, GcAllocErr, GcRefCell, GcScope};
+use ::scoped_gc::{Gc, GcAllocErr, GcScope};
 use avm1_tree as avm1;
 
 pub use self::object::AvmObject;
@@ -325,7 +325,7 @@ impl<'gc> TryFrom<AvmValue<'gc>> for AvmPrimitive<'gc> {
       AvmValue::Boolean(v) => Ok(AvmPrimitive::Boolean(v)),
       AvmValue::Number(v) => Ok(AvmPrimitive::Number(v)),
       AvmValue::String(v) => Ok(AvmPrimitive::String(v)),
-      AvmValue::Object(v) => Err(()),
+      AvmValue::Object(_) => Err(()),
     }
   }
 }

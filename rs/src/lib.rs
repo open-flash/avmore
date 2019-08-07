@@ -7,6 +7,7 @@ pub mod avm1;
 pub mod context;
 pub mod error;
 pub mod host;
+pub mod realm;
 pub mod values;
 
 #[cfg(test)]

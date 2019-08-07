@@ -1,11 +1,7 @@
-use ::std::collections::hash_map::HashMap;
+use scoped_gc::{Gc, GcAllocErr, GcScope};
 
-use ::scoped_gc::GcScope;
-use avm1_tree;
-
-use crate::host::Host;
 use crate::values::{AvmString, AvmValue};
-use scoped_gc::{Gc, GcAllocErr};
+use crate::values::object::AvmCallable;
 
 // Ok: normal return
 // Err: throw value
@@ -19,15 +15,38 @@ pub trait Context<'gc> {
   fn swf_version(&self) -> u8;
 }
 
-// Struct passed to native functions to handle context-sensitive operations
-pub(crate) struct FunctionContext<'gc> {
-  pub(crate) gc: &'gc GcScope<'gc>,
-  pub(crate) _swf_version: u8,
+pub trait CallContext<'gc>: Context<'gc> {
+  /// Returns the current `this` value.
+  // TODO: Allow only `Object` and `Undefined` as a `this` values
+  fn this(&mut self) -> AvmValue<'gc>;
 }
 
-impl<'gc> Context<'gc> for FunctionContext<'gc> {
-  fn apply(&mut self, callable: AvmValue<'gc>, this_arg: AvmValue<'gc>, args: &[AvmValue<'gc>]) -> AvmResult<'gc> {
-    unimplemented!()
+// Struct passed to native functions to handle context-sensitive operations
+pub(crate) struct ContextImpl<'gc> {
+  pub(crate) gc: &'gc GcScope<'gc>,
+  pub(crate) _swf_version: u8,
+  pub(crate) _this: AvmValue<'gc>,
+}
+
+impl<'gc> Context<'gc> for ContextImpl<'gc> {
+  fn apply(&mut self, callable: AvmValue<'gc>, this_arg: AvmValue<'gc>, _args: &[AvmValue<'gc>]) -> AvmResult<'gc> {
+    match callable {
+      AvmValue::Object(obj) => {
+        match &obj.0.borrow().callable {
+          Some(AvmCallable::HostFunction(f)) => {
+            let mut sub_ctx = ContextImpl {
+              gc: self.gc,
+              _swf_version: self._swf_version,
+              _this: this_arg,
+            };
+
+            (f.func)(&mut sub_ctx)
+          },
+          _ => unimplemented!("Apply(non-HostFunction)")
+        }
+      },
+      _ => unimplemented!("Apply(non-Object)")
+    }
   }
 
   fn string(&mut self, s: String) -> Result<Gc<'gc, AvmString>, GcAllocErr> {
@@ -36,5 +55,11 @@ impl<'gc> Context<'gc> for FunctionContext<'gc> {
 
   fn swf_version(&self) -> u8 {
     self._swf_version
+  }
+}
+
+impl<'gc> CallContext<'gc> for ContextImpl<'gc> {
+  fn this(&mut self) -> AvmValue<'gc> {
+    self._this.clone()
   }
 }

@@ -1,35 +1,38 @@
 use ::std::usize;
 use std::collections::HashMap;
-use std::ops::RangeInclusive;
 
 use ::scoped_gc::{Gc, GcRefCell};
 use avm1_tree as avm1;
 use scoped_gc::{GcAllocErr, GcScope};
 
-use crate::context::{AvmResult, FunctionContext};
+use crate::context::{AvmResult, ContextImpl};
 use crate::error::{ReferenceToUndeclaredVariableWarning, TargetHasNoProperty, Warning};
 use crate::host::Host;
 use crate::values::{AvmConvert, AvmNumber, AvmObject, AvmPrimitive, AvmString, AvmValue, ToPrimitiveHint};
-use crate::values::object::{AvmFunction, AvmObjectRef};
+use crate::values::object::{AvmFunction, AvmObjectRef, AvmCallable};
+use crate::realm::Realm;
 
 pub struct Vm<'gc> {
   gc: &'gc GcScope<'gc>,
+
+  realm: Realm<'gc>,
 
   pub swf_version: u8,
 
   // This is wrong: the pool may be dropped AFTER the GcScope
   pool: ConstantPool<'gc>,
 
-  host: &'gc Host,
+  host: &'gc dyn Host,
 
   next_script_id: Avm1ScriptId,
   scripts_by_id: HashMap<Avm1ScriptId, Avm1Script>,
 }
 
 impl<'gc> Vm<'gc> {
-  pub fn new(gc: &'gc GcScope<'gc>, host: &'gc Host, swf_version: u8) -> Self {
+  pub fn new(gc: &'gc GcScope<'gc>, host: &'gc dyn Host, swf_version: u8) -> Self {
     Self {
       gc,
+      realm: Realm::new(gc),
       swf_version,
       pool: ConstantPool::new(),
       host,
@@ -443,7 +446,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       register_count: 4,
     };
 
-    let avm_obj = AvmObject::new_callable(self.vm.gc, avm_fn).unwrap();
+    let avm_obj = AvmObject::new_callable(self.vm.gc, AvmCallable::AvmFunction(avm_fn)).unwrap();
     let value = AvmValue::Object(avm_obj);
 
     if !action.name.is_empty() {
@@ -481,7 +484,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       register_count: action.register_count as u8,
     };
 
-    let avm_obj = AvmObject::new_callable(self.vm.gc, avm_fn).unwrap();
+    let avm_obj = AvmObject::new_callable(self.vm.gc, AvmCallable::AvmFunction(avm_fn)).unwrap();
     let value = AvmValue::Object(avm_obj);
 
     if !action.name.is_empty() {
@@ -644,7 +647,7 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
 
   fn exec_init_object(&mut self) -> () {
     let property_count: usize = to_usize(self.frame.stack.pop()).unwrap();
-    let obj: AvmObjectRef = AvmObject::new(self.vm.gc).unwrap();
+    let obj: AvmObjectRef = AvmObject::new(self.vm.gc, Some(self.vm.realm.obj_p.clone())).unwrap();
     for _ in 0..property_count {
       let value: AvmValue = self.frame.stack.pop();
       let key: String = String::from(self.frame.stack.pop().to_avm_string(&mut self.as_function_context()).unwrap().value());
@@ -690,12 +693,12 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     }
 
     let ctr = self.frame.scope.borrow().get(ctr_name.value()).unwrap_or(AvmValue::UNDEFINED);
-    let this_arg: AvmValue = AvmValue::Object(AvmObject::new(self.vm.gc).unwrap());
+    let this_arg: AvmValue = AvmValue::Object(AvmObject::new(self.vm.gc, Some(self.vm.realm.obj_p.clone())).unwrap());
 
     let result = self.apply(ctr, this_arg.clone(), &[]);
 
     match result {
-      Ok(result) => {
+      Ok(_) => {
         // Discard result
       }
       Err(_) => unimplemented!("Throw support"),
@@ -849,7 +852,8 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
       _ => return Err(AvmValue::string(self.vm.gc, String::from("TypeError: `callable` is not an object")).unwrap()),
     };
     let (code, scope) = match obj.0.borrow().callable {
-      Some(ref c) => (c.code.clone(), Gc::clone(&c.scope)),
+      Some(AvmCallable::AvmFunction(ref c)) => (c.code.clone(), Gc::clone(&c.scope)),
+      Some(AvmCallable::HostFunction(ref c)) => unimplemented!("Apply(HostFunction)"),
       None => return Err(AvmValue::string(self.vm.gc, String::from("TypeError: `callable` is an object with an empty `callable` property")).unwrap()),
     };
 
@@ -880,10 +884,11 @@ impl<'ectx, 'gc: 'ectx> ExecutionContext<'ectx, 'gc> {
     Ok(ectx.frame.call_result.clone())
   }
 
-  pub(crate) fn as_function_context(&mut self) -> FunctionContext<'gc> {
-    FunctionContext {
+  pub(crate) fn as_function_context(&mut self) -> ContextImpl<'gc> {
+    ContextImpl {
       gc: self.vm.gc,
       _swf_version: self.vm.swf_version,
+      _this: self.frame.this.clone(),
     }
   }
 }

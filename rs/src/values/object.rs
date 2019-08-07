@@ -4,10 +4,10 @@ use std::convert::TryFrom;
 use scoped_gc::{Gc, GcAllocErr, GcRefCell, GcScope};
 
 use crate::avm1::Scope;
-use crate::context::Context;
-use crate::values::{AvmPrimitive, AvmString, ToPrimitiveHint, AvmConvert, AvmBoolean, AvmNumber};
+use crate::context::{AvmResult, CallContext, Context};
+use crate::values::{AvmBoolean, AvmConvert, AvmNull, AvmNumber, AvmPrimitive, AvmString, ToPrimitiveHint};
 
-use self::super::{AvmUndefined, AvmValue};
+use self::super::AvmValue;
 
 #[derive(Debug, Clone, Trace)]
 pub struct AvmObjectProperty<'gc> {
@@ -18,27 +18,61 @@ pub struct AvmObjectProperty<'gc> {
   pub value: AvmValue<'gc>,
 }
 
+#[derive(Debug, Clone, Trace)]
+pub enum AvmObjectPrototype<'gc> {
+  Null(AvmNull),
+  Object(AvmObjectRef<'gc>),
+}
+
+impl<'gc> TryFrom<AvmValue<'gc>> for AvmObjectPrototype<'gc> {
+  type Error = ();
+
+  fn try_from(value: AvmValue<'gc>) -> Result<Self, Self::Error> {
+    match value {
+      AvmValue::Undefined(_) => Err(()),
+      AvmValue::Null(v) => Ok(AvmObjectPrototype::Null(v)),
+      AvmValue::Boolean(_) => Err(()),
+      AvmValue::Number(_) => Err(()),
+      AvmValue::String(_) => Err(()),
+      AvmValue::Object(v) => Ok(AvmObjectPrototype::Object(v)),
+    }
+  }
+}
+
 #[derive(Debug, Trace)]
 pub struct AvmObject<'gc> {
-  // TODO: Insertion order
-  properties: HashMap<String, AvmObjectProperty<'gc>>,
+  // Internal `[[class]]`
+  pub class: &'static str,
 
-  pub callable: Option<AvmFunction<'gc>>,
+  // internal `[[prototype]]` (`__proto__`), not `prototype` property
+  pub prototype: AvmObjectPrototype<'gc>,
+
+  // TODO: Insertion order
+  pub properties: HashMap<String, AvmObjectProperty<'gc>>,
+
+  pub callable: Option<AvmCallable<'gc>>,
 }
 
 impl<'gc> AvmObject<'gc> {
-  pub fn new(gc: &'gc GcScope<'gc>) -> Result<AvmObjectRef<'gc>, GcAllocErr> {
+  pub fn new(gc: &'gc GcScope<'gc>, prototype: Option<AvmObjectRef<'gc>>) -> Result<AvmObjectRef<'gc>, GcAllocErr> {
     gc
       .alloc(GcRefCell::new(AvmObject {
+        class: "Object",
+        prototype: match prototype {
+          Some(p) => AvmObjectPrototype::Object(p),
+          None => AvmObjectPrototype::Null(AvmNull),
+        },
         properties: HashMap::new(),
         callable: None,
       }))
       .map(AvmObjectRef)
   }
 
-  pub fn new_callable(gc: &'gc GcScope<'gc>, callable: AvmFunction<'gc>) -> Result<AvmObjectRef<'gc>, GcAllocErr> {
+  pub fn new_callable(gc: &'gc GcScope<'gc>, callable: AvmCallable<'gc>) -> Result<AvmObjectRef<'gc>, GcAllocErr> {
     gc
       .alloc(GcRefCell::new(AvmObject {
+        class: "Function",
+        prototype: AvmObjectPrototype::Null(AvmNull),
         properties: HashMap::new(),
         callable: Some(callable),
       }))
@@ -57,12 +91,24 @@ impl<'gc> AvmObject<'gc> {
   }
 
   pub fn get(&self, key: &str) -> Option<AvmValue<'gc>> {
+    let mut result: Option<AvmValue<'gc>> = self.get_local(key);
+    // TODO: Recurse (needs loop detection?)
+    if result.is_none() {
+      result = match &self.prototype {
+        AvmObjectPrototype::Null(_) => result,
+        AvmObjectPrototype::Object(p) => p.0.borrow().get_local(key),
+      };
+    }
+    result
+  }
+
+  pub fn get_local(&self, key: &str) -> Option<AvmValue<'gc>> {
     self.properties.get(key)
       .map(|prop| prop.value.clone())
   }
 
-  pub fn get_property(&self, key: String) -> Option<AvmObjectProperty<'gc>> {
-    self.properties.get(&key).map(|prop| prop.clone())
+  pub fn get_local_property(&self, key: &str) -> Option<&AvmObjectProperty<'gc>> {
+    self.properties.get(key)
   }
 }
 
@@ -134,6 +180,12 @@ impl<'gc> AvmConvert<'gc> for AvmObjectRef<'gc> {
 }
 
 #[derive(Debug, Trace)]
+pub enum AvmCallable<'gc> {
+  AvmFunction(AvmFunction<'gc>),
+  HostFunction(HostFunction<'gc>),
+}
+
+#[derive(Debug, Trace)]
 pub struct AvmFunction<'gc> {
   /// Id of the script containing the code
   //  script_id: Avm1ScriptId,
@@ -146,4 +198,23 @@ pub struct AvmFunction<'gc> {
   pub scope: Gc<'gc, GcRefCell<Scope<'gc>>>,
 
   pub register_count: u8,
+}
+
+pub struct HostFunction<'gc> {
+  pub func: fn(&mut dyn CallContext<'gc>) -> AvmResult<'gc>,
+}
+
+impl<'gc> std::fmt::Debug for HostFunction<'gc> {
+  fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+    write!(f, "HostFunction(...)")
+  }
+}
+
+unsafe impl<'gc> scoped_gc::Trace for HostFunction<'gc> {
+  #[inline]
+  unsafe fn mark(&self) {}
+  #[inline]
+  unsafe fn root(&self) {}
+  #[inline]
+  unsafe fn unroot(&self) {}
 }
