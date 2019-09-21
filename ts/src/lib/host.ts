@@ -1,3 +1,4 @@
+import { UintSize } from "semantic-types";
 import { TargetId } from "./vm";
 
 export interface Host {
@@ -10,6 +11,12 @@ export interface Host {
 
 export interface Target {
   stop(): void;
+
+  play(): void;
+
+  gotoFrame(frameIndex: UintSize): void;
+
+  getFrameLoadingProgress(): {loaded: UintSize; total: UintSize};
 }
 
 export class NativeHost implements Host {

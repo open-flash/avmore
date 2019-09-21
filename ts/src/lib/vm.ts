@@ -2,7 +2,7 @@
 
 import { cfgFromBytes } from "avm1-parser";
 import { ActionType } from "avm1-tree/action-type";
-import { ConstantPool, Push, SetTarget } from "avm1-tree/actions";
+import { ConstantPool, GotoFrame, Push, SetTarget, WaitForFrame } from "avm1-tree/actions";
 import { Cfg } from "avm1-tree/cfg";
 import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgIf } from "avm1-tree/cfg-actions/cfg-if";
@@ -70,7 +70,11 @@ export class Vm {
     this.scriptsById = new Map();
   }
 
-  createAvm1Script(avm1Bytes: Uint8Array, target: TargetId | null, rootScope: AvmValue | null): Avm1ScriptId {
+  createAvm1Script(
+    avm1Bytes: Uint8Array,
+    target: TargetId | null,
+    rootScope: AvmValue | null,
+  ): Avm1ScriptId {
     const id: number = this.nextScriptId++;
     const script: Avm1Script = {id, bytes: avm1Bytes, target, rootScope};
     this.scriptsById.set(id, script);
@@ -236,10 +240,18 @@ export class ExecutionContext {
   private readonly callStack: Activation[];
   private readonly host: Host;
   private target: TargetId | null;
+  // If non-zero, skip next `skipCount` actions (used to implement `WaitForFrame`)
+  private skipCount: UintSize;
   private readonly defaultTarget: TargetId | null;
   private readonly scope: AvmScope;
 
-  constructor(vm: Vm, host: Host, defaultTarget: TargetId | null, activation: Activation, scope: AvmScope) {
+  constructor(
+    vm: Vm,
+    host: Host,
+    defaultTarget: TargetId | null,
+    activation: Activation,
+    scope: AvmScope,
+  ) {
     this.vm = vm;
     this.constantPool = new AvmConstantPool();
     this.stack = new AvmStack();
@@ -248,6 +260,7 @@ export class ExecutionContext {
     this.host = host;
     this.target = defaultTarget;
     this.defaultTarget = defaultTarget;
+    this.skipCount = 0;
   }
 
   public nextStep(): boolean {
@@ -302,6 +315,10 @@ export class ExecutionContext {
   }
 
   public exec(action: CfgAction): void {
+    if (this.skipCount > 0) { // Ignore action due to `WaitForFrame` skip count
+      this.skipCount--;
+      return;
+    }
     switch (action.action) {
       case ActionType.CallMethod:
         this.execCallMethod();
@@ -321,6 +338,9 @@ export class ExecutionContext {
       case ActionType.GetVariable:
         this.execGetVariable();
         break;
+      case ActionType.GotoFrame:
+        this.execGotoFrame(action);
+        break;
       case ActionType.Greater:
         this.execGreater();
         break;
@@ -335,6 +355,9 @@ export class ExecutionContext {
         break;
       case ActionType.Not:
         this.execNot();
+        break;
+      case ActionType.Play:
+        this.execPlay();
         break;
       case ActionType.Pop:
         this.execPop();
@@ -359,6 +382,9 @@ export class ExecutionContext {
         break;
       case ActionType.Trace:
         this.execTrace();
+        break;
+      case ActionType.WaitForFrame:
+        this.execWaitForFrame(action);
         break;
       default:
         console.error(action);
@@ -431,6 +457,19 @@ export class ExecutionContext {
     this.stack.push(value !== undefined ? value : AVM_UNDEFINED);
   }
 
+  private execGotoFrame(action: GotoFrame): void {
+    if (this.target === null) {
+      console.warn("NoCurrentTarget");
+      return;
+    }
+    const target: Target | undefined = this.host.getTarget(this.target);
+    if (target !== undefined) {
+      target.gotoFrame(action.frame);
+    } else {
+      console.warn("TargetNotFound");
+    }
+  }
+
   private execGreater(): void {
     const right: AvmValue = this.stack.pop();
     const left: AvmValue = this.stack.pop();
@@ -487,6 +526,19 @@ export class ExecutionContext {
       this.stack.push(argBoolean.value ? AVM_FALSE : AVM_TRUE);
     } else {
       this.stack.push(argBoolean.value ? AVM_ZERO : AVM_ONE);
+    }
+  }
+
+  private execPlay(): void {
+    if (this.target === null) {
+      console.warn("NoCurrentTarget");
+      return;
+    }
+    const target: Target | undefined = this.host.getTarget(this.target);
+    if (target !== undefined) {
+      target.play();
+    } else {
+      console.warn("TargetNotFound");
     }
   }
 
@@ -578,6 +630,33 @@ export class ExecutionContext {
       ? {type: AvmValueType.String as AvmValueType.String, value: "undefined"}
       : AvmValue.toAvmString(message, SWF_VERSION);
     this.host.trace(messageStr.value);
+  }
+
+  private execWaitForFrame(action: WaitForFrame): void {
+    if (this.target === null) {
+      console.warn("NoCurrentTarget");
+      return;
+    }
+    const target: Target | undefined = this.host.getTarget(this.target);
+    if (target === undefined) {
+      console.warn("TargetNotFound");
+      return;
+    }
+    const progress: {loaded: UintSize; total: UintSize} = target.getFrameLoadingProgress();
+
+    // Note:
+    // - `action.frame` is 0-indexed.
+    // - `progress.loaded` returns values in `[0, progress.total]` (inclusive) but since we are
+    //   running the script, the first frame should be loaded and we can expected
+    //   `progress.loaded >= 1` (or maybe we may get `0` using `setTarget` shenanigans)
+    // - `progress.loaded >= progress.total` implies `isRequestedFrameLoaded` regardless of frame
+    //   index.
+
+    const isRequestedFrameLoaded: boolean = progress.loaded >= progress.total || progress.loaded > action.frame;
+
+    if (isRequestedFrameLoaded) {
+      this.skipCount = action.skipCount;
+    }
   }
 
   private toAvmString(avmValue: AvmValue): AvmString {
