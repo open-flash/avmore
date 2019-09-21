@@ -20,7 +20,7 @@ export class DynamicScope implements AvmScope {
   }
 
   set(name: string, value: AvmValue, ectx: ExecutionContext): void {
-    return ectx.vm.setMember(this.scope, name, value);
+    ectx.vm.setMember(this.scope, name, value);
   }
 }
 
