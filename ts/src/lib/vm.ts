@@ -1,4 +1,4 @@
-// tslint:disable:max-classes-per-file
+// tslint:disable:max-classes-per-file max-file-line-count
 
 import { cfgFromBytes } from "avm1-parser";
 import { ActionType } from "avm1-tree/action-type";
@@ -19,17 +19,20 @@ import {
   AVM_UNDEFINED,
   AVM_ZERO,
   AvmBoolean,
-  AvmExternal,
   AvmExternalHandler,
+  AvmExternalObject,
+  AvmNull,
   AvmNumber,
   AvmObject,
   AvmObjectProperty,
+  AvmSimpleObject,
   AvmString,
   AvmValue,
   AvmValueType,
 } from "./avm-value";
 import { ReferenceToUndeclaredVariableWarning } from "./error";
 import { Host, Target } from "./host";
+import { Realm } from "./realm";
 import { AvmScope, DynamicScope, StaticScope } from "./scope";
 
 const SWF_VERSION: number = 8;
@@ -64,10 +67,12 @@ export interface Avm1Script {
 export class Vm {
   private nextScriptId: number;
   private readonly scriptsById: Map<Avm1ScriptId, Avm1Script>;
+  private realm: Realm;
 
   constructor() {
     this.nextScriptId = 0;
     this.scriptsById = new Map();
+    this.realm = new Realm();
   }
 
   createAvm1Script(
@@ -103,29 +108,32 @@ export class Vm {
     }
   }
 
-  public newExternal(handler: AvmExternalHandler): AvmExternal {
+  public newExternal(handler: AvmExternalHandler): AvmExternalObject {
     return {
-      type: AvmValueType.External,
+      type: AvmValueType.Object,
+      external: true,
       handler,
     };
   }
 
-  public newObject(): AvmObject {
+  public newObject(proto?: AvmObject | AvmNull): AvmSimpleObject {
     return {
       type: AvmValueType.Object,
-      prototype: AVM_NULL,
+      external: false,
+      class: "Object",
+      prototype: proto !== undefined ? proto : this.realm.objectProto,
       ownProperties: new Map(),
     };
   }
 
   public setMember(target: AvmValue, key: string, value: AvmValue): void {
     switch (target.type) {
-      case AvmValueType.External: {
-        target.handler.set(key, value);
-        break;
-      }
       case AvmValueType.Object: {
-        target.ownProperties.set(key, {value});
+        if (target.external) {
+          target.handler.set(key, value);
+        } else {
+          target.ownProperties.set(key, {value});
+        }
         break;
       }
       default:
@@ -140,15 +148,15 @@ export class Vm {
 
   public tryGetMember(target: AvmValue, key: string): AvmValue | undefined {
     switch (target.type) {
-      case AvmValueType.External: {
-        return target.handler.get(key);
-      }
       case AvmValueType.Object: {
+        if (target.external) {
+          return target.handler.get(key);
+        }
         const prop: AvmObjectProperty | undefined = target.ownProperties.get(key);
         if (prop !== undefined) {
           return prop.value;
         }
-        if (target.prototype.type === AvmValueType.External || target.prototype.type === AvmValueType.Object) {
+        if (target.prototype.type === AvmValueType.Object) {
           return this.tryGetMember(target.prototype, key);
         }
         return undefined;
@@ -302,15 +310,16 @@ export class ExecutionContext {
   }
 
   public apply(fn: AvmValue, thisArg: AvmValue, args: ReadonlyArray<AvmValue>): AvmValue {
-    switch (fn.type) {
-      case AvmValueType.External: {
-        if (fn.handler.apply === undefined) {
-          throw new Error("CannotApplyExternal");
-        }
-        return fn.handler.apply(thisArg, args);
+    if (fn.type !== AvmValueType.Object) {
+      throw new Error("CannotApply");
+    }
+    if (fn.external) {
+      if (fn.handler.apply === undefined) {
+        throw new Error("CannotApplyExternal");
       }
-      default:
-        throw new Error("CannotApply");
+      return fn.handler.apply(thisArg, args);
+    } else {
+      throw new Error("CannotApply");
     }
   }
 
@@ -732,7 +741,6 @@ export class ExecutionContext {
           return left.value === (right as AvmBoolean).value;
         // 13. Return true if x and y refer to the same object or if they refer to objects joined to each
         //     other (see 13.1.2). Otherwise, return false.
-        case AvmValueType.External:
         case AvmValueType.Function:
         case AvmValueType.Object:
           // TODO: Check for joined objects
@@ -775,11 +783,7 @@ export class ExecutionContext {
       //     return the result of the comparison x == ToPrimitive(y).
       if (
         (left.type === AvmValueType.String || left.type === AvmValueType.Number)
-        && (
-          right.type === AvmValueType.External
-          || right.type === AvmValueType.Function
-          || right.type === AvmValueType.Object
-        )
+        && (right.type === AvmValueType.Function || right.type === AvmValueType.Object)
       ) {
         const rightPrimitive: AvmValue = AvmValue.toAvmPrimitive(right, null, SWF_VERSION);
         return this.abstractEquals(left, rightPrimitive);
@@ -787,11 +791,7 @@ export class ExecutionContext {
       // 21. If Type(x) is Object and Type(y) is either String or Number,
       // return the result of the comparison ToPrimitive(x) == y.
       if (
-        (
-          left.type === AvmValueType.External
-          || left.type === AvmValueType.Function
-          || left.type === AvmValueType.Object
-        )
+        (left.type === AvmValueType.Function || left.type === AvmValueType.Object)
         && (right.type === AvmValueType.String || right.type === AvmValueType.Number)
       ) {
         const leftPrimitive: AvmValue = AvmValue.toAvmPrimitive(left, null, SWF_VERSION);

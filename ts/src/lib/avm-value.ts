@@ -1,6 +1,5 @@
 export enum AvmValueType {
   Boolean,
-  External,
   Function,
   Null,
   Number,
@@ -17,10 +16,14 @@ export interface AvmExternalHandler {
   set(key: string, value: AvmValue): void;
 
   get(key: string): AvmValue | undefined;
+
+  // Class name to use for `Object.prototype.toString`
+  getClass(): string;
 }
 
-export interface AvmExternal {
-  readonly type: AvmValueType.External;
+export interface AvmExternalObject {
+  readonly type: AvmValueType.Object;
+  readonly external: true;
   readonly handler: AvmExternalHandler;
 }
 
@@ -51,11 +54,31 @@ export interface AvmObjectProperty {
   readonly value: AvmValue;
 }
 
-export interface AvmObject {
-  readonly type: AvmValueType.Object;
-  prototype: AvmValue;
-  readonly ownProperties: Map<string, AvmObjectProperty>;
+export enum CallableType {
+  Avm,
+  Host,
 }
+
+export type Callable = AsFunction | HostFunction;
+
+export type AsFunction = any;
+
+export interface HostFunction {
+  type: CallableType.Host;
+  handler: NativeCallHandler;
+}
+
+export interface AvmSimpleObject {
+  readonly type: AvmValueType.Object;
+  readonly external: false;
+  // `Object`, `Functions, etc. (used for `.toString`)
+  class: string;
+  prototype: AvmObject | AvmNull;
+  readonly ownProperties: Map<string, AvmObjectProperty>;
+  callable?: Callable;
+}
+
+export type AvmObject = AvmExternalObject | AvmSimpleObject;
 
 /**
  * A call result is a tuple `[isThrow, value]`.
@@ -67,7 +90,7 @@ export interface AvmObject {
 export type AvmCallResult = [boolean, AvmValue];
 
 export interface AvmCall {
-  readonly context?: AvmValue;
+  readonly context: AvmObject | AvmUndefined;
   readonly args: AvmValue[];
   readonly callee?: AvmFunction;
 }
@@ -91,7 +114,6 @@ export interface AvmClientFunction {
 export type AvmFunction = AvmNativeFunction | AvmClientFunction;
 
 export type AvmValue = AvmBoolean
-  | AvmExternal
   | AvmNull
   | AvmNumber
   | AvmObject

@@ -17,7 +17,7 @@ pub trait Context<'gc> {
 
 pub trait CallContext<'gc>: Context<'gc> {
   /// Returns the current `this` value.
-  // TODO: Allow only `Object` and `Undefined` as a `this` values
+  // TODO: Allow only `Object` and `Undefined` as `this` values
   fn this(&mut self) -> AvmValue<'gc>;
 }
 
