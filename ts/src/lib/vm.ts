@@ -5,11 +5,13 @@ import { ActionType } from "avm1-tree/action-type";
 import { ConstantPool, GotoFrame, Push, SetTarget, WaitForFrame } from "avm1-tree/actions";
 import { Cfg } from "avm1-tree/cfg";
 import { CfgAction } from "avm1-tree/cfg-action";
+import { CfgDefineFunction } from "avm1-tree/cfg-actions/cfg-define-function";
 import { CfgIf } from "avm1-tree/cfg-actions/cfg-if";
 import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
 import { CfgLabel } from "avm1-tree/cfg-label";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
+import { Incident } from "incident";
 import { UintSize } from "semantic-types";
 import {
   AVM_FALSE,
@@ -19,8 +21,10 @@ import {
   AVM_UNDEFINED,
   AVM_ZERO,
   AvmBoolean,
+  AvmCallResult,
   AvmExternalHandler,
   AvmExternalObject,
+  AvmFunction,
   AvmNull,
   AvmNumber,
   AvmObject,
@@ -29,6 +33,8 @@ import {
   AvmString,
   AvmValue,
   AvmValueType,
+  Callable,
+  CallableType,
 } from "./avm-value";
 import { ReferenceToUndeclaredVariableWarning } from "./error";
 import { Host, Target } from "./host";
@@ -65,9 +71,9 @@ export interface Avm1Script {
 }
 
 export class Vm {
+  public readonly realm: Realm;
   private nextScriptId: number;
   private readonly scriptsById: Map<Avm1ScriptId, Avm1Script>;
-  private realm: Realm;
 
   constructor() {
     this.nextScriptId = 0;
@@ -271,6 +277,7 @@ export class ExecutionContext {
     this.skipCount = 0;
   }
 
+  // Returns a boolean indicating if there was some progress
   public nextStep(): boolean {
     const activation: Activation | undefined = this.callStack[this.callStack.length - 1];
     if (activation === undefined) {
@@ -311,7 +318,7 @@ export class ExecutionContext {
 
   public apply(fn: AvmValue, thisArg: AvmValue, args: ReadonlyArray<AvmValue>): AvmValue {
     if (fn.type !== AvmValueType.Object) {
-      throw new Error("CannotApply");
+      throw new Error("CannotApplyNonObject");
     }
     if (fn.external) {
       if (fn.handler.apply === undefined) {
@@ -319,7 +326,33 @@ export class ExecutionContext {
       }
       return fn.handler.apply(thisArg, args);
     } else {
-      throw new Error("CannotApply");
+      const callable: Callable | undefined = fn.callable;
+      if (callable === undefined) {
+        throw new Error("CannotApplyNonCallableObject");
+      }
+      if (thisArg.type !== AvmValueType.Object && thisArg.type !== AvmValueType.Undefined) {
+        throw new Error("NotImplemented: NonObjectThisArg");
+      }
+
+      if (callable.type === CallableType.Avm) {
+        const frame: FunctionActivation = new FunctionActivation(callable.body);
+        const scope: StaticScope = new StaticScope();
+        const childCtx: ExecutionContext = new ExecutionContext(this.vm, this.host, this.defaultTarget, frame, scope);
+        const MAX_STEPS: UintSize = 1000;
+        for (let step: UintSize = 0; step < MAX_STEPS; step++) {
+          const hasAdvanced: boolean = childCtx.nextStep();
+          if (!hasAdvanced) {
+            break;
+          }
+        }
+        return frame.returnValue;
+      } else { // CallableType.Host
+        const [isThrow, value]: AvmCallResult = callable.handler({thisArg, args});
+        if (isThrow) {
+          throw new Incident("HostFunctionThrow", {value});
+        }
+        return value;
+      }
     }
   }
 
@@ -329,6 +362,9 @@ export class ExecutionContext {
       return;
     }
     switch (action.action) {
+      case ActionType.CallFunction:
+        this.execCallFunction();
+        break;
       case ActionType.CallMethod:
         this.execCallMethod();
         break;
@@ -337,6 +373,9 @@ export class ExecutionContext {
         break;
       case ActionType.DefineLocal:
         this.execDefineLocal();
+        break;
+      case ActionType.DefineFunction:
+        this.execDefineFunction(action);
         break;
       case ActionType.Equals2:
         this.execEquals2();
@@ -412,6 +451,24 @@ export class ExecutionContext {
     }
   }
 
+  private execCallFunction(): void {
+    const fnName: AvmValue = this.stack.pop();
+    const argCount: AvmValue = this.stack.pop();
+
+    const fnNameStr: AvmString = AvmValue.toAvmString(fnName, SWF_VERSION);
+    const argCountNum: AvmNumber = AvmValue.toAvmNumber(argCount, SWF_VERSION);
+
+    if (argCountNum.value !== 0) {
+      throw new Error("NotImplemented: CallFunction with arguments");
+    }
+    const _fn: AvmValue | undefined = this.scope.get(fnNameStr.value, this);
+    const fn: AvmValue = _fn !== undefined ? _fn : AVM_UNDEFINED;
+
+    const result: AvmValue = this.apply(fn, AVM_UNDEFINED, []);
+
+    this.stack.push(result);
+  }
+
   private execCallMethod(): void {
     const avmKey: AvmValue = this.stack.pop();
     if (avmKey.type === AvmValueType.Undefined) {
@@ -442,6 +499,31 @@ export class ExecutionContext {
     const value: AvmValue = this.stack.pop();
     const name: string = this.toAvmString(this.stack.pop()).value;
     this.scope.set(name, value, this);
+  }
+
+  private execDefineFunction(action: CfgDefineFunction): void {
+    const fn: AvmFunction = {
+      type: CallableType.Avm,
+      name: action.name,
+      parameters: action.parameters,
+      registerCount: 4,
+      body: action.body,
+    };
+
+    const fnObj: AvmSimpleObject = {
+      type: AvmValueType.Object,
+      external: false,
+      class: "Function",
+      prototype: this.vm.realm.funcProto,
+      ownProperties: new Map(),
+      callable: fn,
+    };
+
+    if (fn.name !== undefined && fn.name.length > 0) {
+      this.scope.set(fn.name, fnObj, this);
+    }
+
+    this.stack.push(fnObj);
   }
 
   private execEquals2(): void {
@@ -651,7 +733,7 @@ export class ExecutionContext {
       console.warn("TargetNotFound");
       return;
     }
-    const progress: {loaded: UintSize; total: UintSize} = target.getFrameLoadingProgress();
+    const progress: { loaded: UintSize; total: UintSize } = target.getFrameLoadingProgress();
 
     // Note:
     // - `action.frame` is 0-indexed.
@@ -741,7 +823,6 @@ export class ExecutionContext {
           return left.value === (right as AvmBoolean).value;
         // 13. Return true if x and y refer to the same object or if they refer to objects joined to each
         //     other (see 13.1.2). Otherwise, return false.
-        case AvmValueType.Function:
         case AvmValueType.Object:
           // TODO: Check for joined objects
           return left === right;
@@ -783,7 +864,7 @@ export class ExecutionContext {
       //     return the result of the comparison x == ToPrimitive(y).
       if (
         (left.type === AvmValueType.String || left.type === AvmValueType.Number)
-        && (right.type === AvmValueType.Function || right.type === AvmValueType.Object)
+        && right.type === AvmValueType.Object
       ) {
         const rightPrimitive: AvmValue = AvmValue.toAvmPrimitive(right, null, SWF_VERSION);
         return this.abstractEquals(left, rightPrimitive);
@@ -791,7 +872,7 @@ export class ExecutionContext {
       // 21. If Type(x) is Object and Type(y) is either String or Number,
       // return the result of the comparison ToPrimitive(x) == y.
       if (
-        (left.type === AvmValueType.Function || left.type === AvmValueType.Object)
+        left.type === AvmValueType.Object
         && (right.type === AvmValueType.String || right.type === AvmValueType.Number)
       ) {
         const leftPrimitive: AvmValue = AvmValue.toAvmPrimitive(left, null, SWF_VERSION);

@@ -1,6 +1,8 @@
+import { Cfg } from "avm1-tree/cfg";
+import { UintSize } from "semantic-types";
+
 export enum AvmValueType {
   Boolean,
-  Function,
   Null,
   Number,
   Object,
@@ -59,13 +61,21 @@ export enum CallableType {
   Host,
 }
 
-export type Callable = AsFunction | HostFunction;
+export type Callable = AvmFunction | HostFunction;
 
-export type AsFunction = any;
+export interface AvmFunction {
+  readonly type: CallableType.Avm;
+  // scriptId
+  name?: string;
+  // TODO: Support parameters with registers
+  parameters: string[];
+  registerCount: UintSize;
+  body: Cfg;
+}
 
 export interface HostFunction {
-  type: CallableType.Host;
-  handler: NativeCallHandler;
+  readonly type: CallableType.Host;
+  handler: HostCallHandler;
 }
 
 export interface AvmSimpleObject {
@@ -89,29 +99,13 @@ export type AvmObject = AvmExternalObject | AvmSimpleObject;
  */
 export type AvmCallResult = [boolean, AvmValue];
 
-export interface AvmCall {
-  readonly context: AvmObject | AvmUndefined;
-  readonly args: AvmValue[];
+export interface AvmCallContext {
+  readonly thisArg: AvmObject | AvmUndefined;
+  readonly args: ReadonlyArray<AvmValue>;
   readonly callee?: AvmFunction;
 }
 
-export type NativeCallHandler = (call: AvmCall) => AvmCallResult;
-
-export interface AvmNativeFunction {
-  readonly type: AvmValueType.Function;
-  readonly native: true;
-  ownProperties?: Map<string, AvmValue>;
-  readonly handler: NativeCallHandler;
-}
-
-export interface AvmClientFunction {
-  readonly type: AvmValueType.Function;
-  readonly native: false;
-  ownProperties?: Map<string, AvmValue>;
-  // definition: DefineFunction;
-}
-
-export type AvmFunction = AvmNativeFunction | AvmClientFunction;
+export type HostCallHandler = (call: AvmCallContext) => AvmCallResult;
 
 export type AvmValue = AvmBoolean
   | AvmNull
