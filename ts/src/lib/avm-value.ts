@@ -15,7 +15,7 @@ export interface AvmExternalHandler {
   // Corresponds to `@@toStringTag` in recent ECMA-262 versions.
   toStringTag?: string;
 
-  ownKeys(): AvmValue[];
+  ownKeys(): AvmString[];
 
   apply?(thisArg: AvmValue | undefined, args: ReadonlyArray<AvmValue>): AvmCallResult;
 

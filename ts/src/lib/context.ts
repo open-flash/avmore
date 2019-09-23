@@ -1,3 +1,4 @@
+import { UintSize } from "semantic-types";
 import { AvmString, AvmValue } from "./avm-value";
 import { AvmCallResult } from "./function";
 
@@ -18,6 +19,8 @@ export interface BaseContext {
 
   setMember(obj: AvmValue, name: AvmValue, value: AvmValue): void;
 
+  getOwnKeys(obj: AvmValue): AvmString[];
+
   setStringMember(obj: AvmValue, name: string, value: AvmValue): void;
 }
 
@@ -29,13 +32,21 @@ export interface ScopeContext {
   localVar(varName: string, value: AvmValue): void;
 }
 
+export interface RegisterContext {
+  getReg(regId: UintSize): AvmValue;
+
+  setReg(regId: UintSize, value: AvmValue): void;
+}
+
 export interface StackContext {
   push(value: AvmValue): void;
 
   pop(): AvmValue;
+
+  peek(): AvmValue;
 }
 
-export interface ActionContext extends BaseContext, ScopeContext, StackContext {
+export interface ActionContext extends BaseContext, RegisterContext, ScopeContext, StackContext {
 }
 
 // export interface CallContext extends BaseContext {

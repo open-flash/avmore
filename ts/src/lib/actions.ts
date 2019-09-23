@@ -1,4 +1,5 @@
-import { AVM_UNDEFINED, AvmValue } from "./avm-value";
+import { StoreRegister } from "avm1-tree/actions";
+import { AVM_NULL, AVM_UNDEFINED, AvmString, AvmValue } from "./avm-value";
 import { ActionContext } from "./context";
 
 export function callFunction(ctx: ActionContext): void {
@@ -33,6 +34,15 @@ export function getVariable(ctx: ActionContext): void {
   ctx.push(value);
 }
 
+export function enumerate2(ctx: ActionContext): void {
+  const obj: AvmValue = ctx.pop();
+  ctx.push(AVM_NULL);
+  const keys: AvmString[] = ctx.getOwnKeys(obj);
+  for (const key of keys) {
+    ctx.push(key);
+  }
+}
+
 export function pop(ctx: ActionContext): void {
   ctx.pop();
 }
@@ -64,4 +74,9 @@ export function setVariable(ctx: ActionContext): void {
     throw new Error("NotImplemented: SetVariableInRemoteTarget");
   }
   ctx.setVar(path, value);
+}
+
+export function storeRegister(ctx: ActionContext, action: StoreRegister): void {
+  const value: AvmValue = ctx.peek();
+  ctx.setReg(action.register, value);
 }

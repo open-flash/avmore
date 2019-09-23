@@ -163,6 +163,36 @@ class AvmStack {
   public pop(): AvmValue {
     return this.stack.length > 0 ? this.stack.pop()! : AVM_UNDEFINED;
   }
+
+  public peek(): AvmValue {
+    return this.stack.length > 0 ? this.stack[this.stack.length - 1] : AVM_UNDEFINED;
+  }
+}
+
+class RegisterTable {
+  private readonly table: AvmValue[];
+
+  constructor(size: UintSize = 4) {
+    const table: AvmValue[] = [];
+    for (let i: UintSize = 0; i < size; i++) {
+      table.push(AVM_UNDEFINED);
+    }
+    this.table = table;
+  }
+
+  public set(regId: UintSize, value: AvmValue): void {
+    if (regId < 0 || regId >= this.table.length) {
+      throw new Error("InvalidRegisterId");
+    }
+    this.table[regId] = value;
+  }
+
+  public get(regId: UintSize): AvmValue {
+    if (regId < 0 || regId >= this.table.length) {
+      throw new Error("InvalidRegisterId");
+    }
+    return this.table[regId];
+  }
 }
 
 class AvmConstantPool {
@@ -232,6 +262,7 @@ export class ExecutionContext implements ActionContext {
   public readonly vm: Vm;
   private readonly constantPool: AvmConstantPool;
   private readonly stack: AvmStack;
+  private readonly registers: RegisterTable;
   private readonly callStack: Activation[];
   private readonly host: Host;
   private target: TargetId | null;
@@ -250,6 +281,7 @@ export class ExecutionContext implements ActionContext {
     this.vm = vm;
     this.constantPool = new AvmConstantPool();
     this.stack = new AvmStack();
+    this.registers = new RegisterTable();
     this.callStack = [activation];
     this.scope = scope;
     this.host = host;
@@ -423,6 +455,21 @@ export class ExecutionContext implements ActionContext {
     this.vm.setMember(obj, key, value);
   }
 
+  public getOwnKeys(obj: AvmValue): AvmString[] {
+    if (obj.type !== AvmValueType.Object) {
+      throw new Error("NotImplemented: ReferenceError on non-object getKeys access");
+    }
+    if (obj.external) {
+      return obj.handler.ownKeys();
+    }
+    const keys: AvmString[] = [];
+    for (const name of obj.ownProperties.keys()) {
+      // TODO: Filter enumerable
+      keys.push(AvmValue.fromHostString(name));
+    }
+    return keys;
+  }
+
   public toAvmBoolean(value: AvmValue): AvmValue {
     return AvmValue.toAvmBoolean(value, SWF_VERSION);
   }
@@ -556,6 +603,18 @@ export class ExecutionContext implements ActionContext {
     return this.stack.pop();
   }
 
+  public peek(): AvmValue {
+    return this.stack.peek();
+  }
+
+  public getReg(regId: UintSize): AvmValue {
+    return this.registers.get(regId);
+  }
+
+  public setReg(regId: UintSize, value: AvmValue): void {
+    this.registers.set(regId, value);
+  }
+
   public exec(action: CfgAction): void {
     if (this.skipCount > 0) { // Ignore action due to `WaitForFrame` skip count
       this.skipCount--;
@@ -579,6 +638,9 @@ export class ExecutionContext implements ActionContext {
         break;
       case ActionType.Equals2:
         this.execEquals2();
+        break;
+      case ActionType.Enumerate2:
+        actions.enumerate2(this);
         break;
       case ActionType.GetMember:
         actions.getMember(this);
@@ -627,6 +689,9 @@ export class ExecutionContext implements ActionContext {
         break;
       case ActionType.Stop:
         this.execStop();
+        break;
+      case ActionType.StoreRegister:
+        actions.storeRegister(this, action);
         break;
       case ActionType.StrictEquals:
         this.execStrictEquals();
@@ -815,17 +880,20 @@ export class ExecutionContext implements ActionContext {
         case AstValueType.Null:
           this.stack.push(AVM_NULL);
           break;
+        case AstValueType.Register:
+          this.stack.push(this.registers.get(value.value));
+          break;
         case AstValueType.Sint32:
           this.stack.push({type: AvmValueType.Number as AvmValueType.Number, value: value.value});
           break;
         case AstValueType.String:
-          this.stack.push({type: AvmValueType.String as AvmValueType.String, value: value.value});
+          this.stack.push(AvmValue.fromHostString(value.value));
           break;
         case AstValueType.Undefined:
           this.stack.push(AVM_UNDEFINED);
           break;
         default:
-          throw new Error(`UnknownValueType ${value.type} (${AstValueType[value.type]})`);
+          throw new Error(`UnknownValueType ${value}`);
       }
     }
   }
