@@ -615,12 +615,54 @@ export class ExecutionContext implements ActionContext {
     this.registers.set(regId, value);
   }
 
+  // Implements the add operation as defined in ECMA-262-3, section 11.6.1
+  // ("The Addition operator ( + )")
+  public add(left: AvmValue, right: AvmValue): AvmString | AvmNumber {
+    // 1. Evaluate AdditiveExpression.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate MultiplicativeExpression.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToPrimitive(Result(2)).
+    const leftPrimitive: AvmPrimitive = this.toAvmPrimitive(left, undefined);
+    // 6. Call ToPrimitive(Result(4)).
+    const rightPrimitive: AvmPrimitive = this.toAvmPrimitive(right, undefined);
+    // 7. If Type(Result(5)) is String _or_ Type(Result(6)) is String, go to
+    //    step 12. (Note that this step differs from step 3 in the comparison
+    //    algorithm for the relational operators, by using _or_ instead of
+    //    _and_.)
+    if (leftPrimitive.type === AvmValueType.String || rightPrimitive.type === AvmValueType.String) {
+      // 12. Call ToString(Result(5)).
+      const leftString: AvmString = this.toAvmString(leftPrimitive);
+      // 13. Call ToString(Result(6)).
+      const rightString: AvmString = this.toAvmString(rightPrimitive);
+      // 14. Concatenate Result(12) followed by Result(13).
+      const result: string = `${leftString.value}${rightString.value}`;
+      // 15. Return Result(14).
+      return AvmValue.fromHostString(result);
+    } else {
+      // 8. Call ToNumber(Result(5)).
+      const leftNumber: AvmNumber = this.toAvmNumber(leftPrimitive);
+      // 9. Call ToNumber(Result(6)).
+      const rightNumber: AvmNumber = this.toAvmNumber(rightPrimitive);
+      // 10. Apply the addition operation to Result(8) and Result(9). See the note below (11.6.3).
+      const result: number = leftNumber.value + rightNumber.value;
+      // 11. Return Result(10).
+      return AvmValue.fromHostNumber(result);
+    }
+  }
+
   public exec(action: CfgAction): void {
     if (this.skipCount > 0) { // Ignore action due to `WaitForFrame` skip count
       this.skipCount--;
       return;
     }
     switch (action.action) {
+      case ActionType.Add2:
+        actions.add2(this);
+        break;
       case ActionType.CallFunction:
         actions.callFunction(this);
         break;

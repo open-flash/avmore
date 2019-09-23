@@ -91,6 +91,9 @@ export const AvmValue = {
   fromHostBoolean(bool: boolean): AvmBoolean {
     return bool ? AVM_TRUE : AVM_FALSE;
   },
+  fromHostNumber(value: number): AvmNumber {
+    return {type: AvmValueType.Number, value};
+  },
   fromHostString(value: string): AvmString {
     return {type: AvmValueType.String, value};
   },

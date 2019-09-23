@@ -2,6 +2,12 @@ import { StoreRegister } from "avm1-tree/actions";
 import { AVM_NULL, AVM_UNDEFINED, AvmString, AvmValue } from "./avm-value";
 import { ActionContext } from "./context";
 
+export function add2(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.add(left, right));
+}
+
 export function callFunction(ctx: ActionContext): void {
   const fnName: string = ctx.toHostString(ctx.pop());
   const argCount: number = ctx.toHostNumber(ctx.pop());

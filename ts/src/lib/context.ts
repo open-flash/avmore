@@ -1,11 +1,15 @@
 import { UintSize } from "semantic-types";
-import { AvmString, AvmValue } from "./avm-value";
+import { AvmNumber, AvmString, AvmValue } from "./avm-value";
 import { AvmCallResult } from "./function";
 
 export interface BaseContext {
+  // Calls
+
   apply(fn: AvmValue, thisArg: AvmValue, args: ReadonlyArray<AvmValue>): AvmCallResult;
 
   construct(fn: AvmValue, args: ReadonlyArray<AvmValue>): AvmCallResult;
+
+  // Conversions
 
   toAvmBoolean(value: AvmValue): AvmValue;
 
@@ -15,6 +19,8 @@ export interface BaseContext {
 
   toHostNumber(value: AvmValue): number;
 
+  // Objects
+
   getMember(obj: AvmValue, name: AvmValue): AvmValue;
 
   setMember(obj: AvmValue, name: AvmValue, value: AvmValue): void;
@@ -22,6 +28,10 @@ export interface BaseContext {
   getOwnKeys(obj: AvmValue): AvmString[];
 
   setStringMember(obj: AvmValue, name: string, value: AvmValue): void;
+
+  // Operators
+
+  add(left: AvmValue, right: AvmValue): AvmString | AvmNumber;
 }
 
 export interface ScopeContext {
