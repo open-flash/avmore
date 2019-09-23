@@ -34,7 +34,7 @@ import {
   AvmValueType,
 } from "./avm-value";
 import { ActionContext } from "./context";
-import { ReferenceToUndeclaredVariableWarning } from "./error";
+import { ReferenceToUndeclaredVariableWarning, TargetHasNoPropertyWarning } from "./error";
 import { AvmCallResult, AvmFunction, Callable, CallableType, CallType } from "./function";
 import { Host, Target } from "./host";
 import { Realm } from "./realm";
@@ -416,22 +416,24 @@ export class ExecutionContext implements ActionContext {
   }
 
   public getMember(obj: AvmValue, key: AvmValue): AvmValue {
-    const value: AvmValue | undefined = this.tryGetMember(obj, key);
-    return value !== undefined ? value : AVM_UNDEFINED;
-  }
-
-  public tryGetMember(obj: AvmValue, key: AvmValue): AvmValue | undefined {
-    return this.tryGetStringMember(obj, this.toHostString(key));
+    return this.getStringMember(obj, this.toHostString(key));
   }
 
   public getStringMember(obj: AvmValue, key: string): AvmValue {
     const value: AvmValue | undefined = this.tryGetStringMember(obj, key);
-    return value !== undefined ? value : AVM_UNDEFINED;
+    if (value !== undefined) {
+      return value;
+    }
+    this.host.warn(new TargetHasNoPropertyWarning("foo", key));
+    return AVM_UNDEFINED;
   }
 
   // Implements `GetValue` and `[[Get]]`
   public tryGetStringMember(obj: AvmValue, key: string): AvmValue | undefined {
     if (obj.type !== AvmValueType.Object) {
+      if (obj.type === AvmValueType.Undefined) {
+        return undefined;
+      }
       throw new Error("NotImplemented: ReferenceError on non-object property access");
     }
     if (obj.external) {
@@ -559,7 +561,6 @@ export class ExecutionContext implements ActionContext {
       cur = cur.parent;
     }
     this.host.warn(new ReferenceToUndeclaredVariableWarning(varName));
-    // TODO: Warn (variable not found)
     return AVM_UNDEFINED;
   }
 
