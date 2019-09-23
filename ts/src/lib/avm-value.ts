@@ -19,7 +19,7 @@ export interface AvmExternalHandler {
 
   apply?(thisArg: AvmValue | undefined, args: ReadonlyArray<AvmValue>): AvmCallResult;
 
-  // construct?(thisArg: AvmValue | undefined, args: ReadonlyArray<AvmValue>): AvmValue;
+  construct?(args: ReadonlyArray<AvmValue>): AvmValue;
 
   set(key: string, value: AvmValue): void;
 
@@ -71,19 +71,23 @@ export interface AvmSimpleObject {
 
 export type AvmObject = AvmExternalObject | AvmSimpleObject;
 
-export type AvmValue = AvmBoolean
+export type AvmPrimitive = AvmBoolean
   | AvmNull
   | AvmNumber
-  | AvmObject
   | AvmFunction
   | AvmUndefined
   | AvmString;
+
+export type AvmValue = AvmPrimitive | AvmObject;
 
 // tslint:disable-next-line:typedef variable-name
 export const AvmValue = {
   // fromAst(astValue: AstValue): AvmValue {
   //
   // }
+  isPrimitive(value: AvmValue): value is AvmPrimitive {
+    return value.type !== AvmValueType.Object;
+  },
   fromHostBoolean(bool: boolean): AvmBoolean {
     return bool ? AVM_TRUE : AVM_FALSE;
   },
@@ -105,21 +109,6 @@ export const AvmValue = {
         return AvmValue.fromHostBoolean(avmValue.value.length > 0);
       default:
         return AVM_TRUE;
-    }
-  },
-  // Implementation of the ToString algorithm from ECMA 262-3, section 9.8
-  toAvmString(avmValue: AvmValue, _swfVersion: number): AvmString {
-    switch (avmValue.type) {
-      case AvmValueType.String:
-        return avmValue;
-      case AvmValueType.Undefined:
-        return {type: AvmValueType.String as AvmValueType.String, value: "undefined"};
-      case AvmValueType.Null:
-        return {type: AvmValueType.String as AvmValueType.String, value: "null"};
-      case AvmValueType.Boolean:
-        return {type: AvmValueType.String as AvmValueType.String, value: avmValue.value ? "true" : "false"};
-      default:
-        throw new Error("NotImplemented: Full `ToString` algorithm");
     }
   },
   // Implementation of the ToNumber algorithm from ECMA 262-3, section 9.3

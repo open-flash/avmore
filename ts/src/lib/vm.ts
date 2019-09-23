@@ -27,6 +27,7 @@ import {
   AvmNumber,
   AvmObject,
   AvmObjectProperty,
+  AvmPrimitive,
   AvmSimpleObject,
   AvmString,
   AvmValue,
@@ -146,31 +147,6 @@ export class Vm {
         throw new Error("InvalidSetMemberTarget");
     }
   }
-
-  public getMember(target: AvmValue, key: string): AvmValue {
-    const value: AvmValue | undefined = this.tryGetMember(target, key);
-    return value !== undefined ? value : AVM_UNDEFINED;
-  }
-
-  public tryGetMember(target: AvmValue, key: string): AvmValue | undefined {
-    switch (target.type) {
-      case AvmValueType.Object: {
-        if (target.external) {
-          return target.handler.get(key);
-        }
-        const prop: AvmObjectProperty | undefined = target.ownProperties.get(key);
-        if (prop !== undefined) {
-          return prop.value;
-        }
-        if (target.prototype.type === AvmValueType.Object) {
-          return this.tryGetMember(target.prototype, key);
-        }
-        return undefined;
-      }
-      default:
-        throw new Error("CannotGetMember");
-    }
-  }
 }
 
 class AvmStack {
@@ -246,6 +222,11 @@ class FunctionActivation extends BaseActivation {
 }
 
 type Activation = ScriptActivation | FunctionActivation;
+
+enum ToPrimitiveHint {
+  Number,
+  String,
+}
 
 export class ExecutionContext implements ActionContext {
   public readonly vm: Vm;
@@ -356,8 +337,50 @@ export class ExecutionContext implements ActionContext {
     }
   }
 
-  public construct(_fn: AvmValue, _args: ReadonlyArray<AvmValue>): AvmCallResult {
-    throw new Error("NotImplemented");
+  public construct(fn: AvmValue, args: ReadonlyArray<AvmValue>): AvmCallResult {
+    if (fn.type !== AvmValueType.Object) {
+      throw new Error("CannotConstructNonObject");
+    }
+    if (fn.external) {
+      if (fn.handler.construct === undefined) {
+        throw new Error("CannotConstructExternal");
+      }
+      return fn.handler.construct(args);
+    } else {
+      const callable: Callable | undefined = fn.callable;
+      if (callable === undefined) {
+        throw new Error("CannotConstructNonCallableObject");
+      }
+
+      const thisArg: AvmSimpleObject = {
+        type: AvmValueType.Object,
+        external: false,
+        class: "Object",
+        prototype: this.vm.realm.objectProto,
+        ownProperties: new Map(),
+        callable: undefined,
+      };
+
+      if (callable.type === CallableType.Avm) {
+        const frame: FunctionActivation = new FunctionActivation(callable.body);
+        const scope: StaticScope = {
+          type: ScopeType.Static,
+          variables: new Map(),
+          parent: callable.parentScope,
+        };
+        const childCtx: ExecutionContext = new ExecutionContext(this.vm, this.host, this.defaultTarget, frame, scope);
+        const MAX_STEPS: UintSize = 1000;
+        for (let step: UintSize = 0; step < MAX_STEPS; step++) {
+          const hasAdvanced: boolean = childCtx.nextStep();
+          if (!hasAdvanced) {
+            break;
+          }
+        }
+      } else { // CallableType.Host
+        callable.handler({type: CallType.Apply, thisArg, args});
+      }
+      return thisArg;
+    }
   }
 
   public getMember(obj: AvmValue, key: AvmValue): AvmValue {
@@ -369,8 +392,27 @@ export class ExecutionContext implements ActionContext {
     return this.tryGetStringMember(obj, this.toHostString(key));
   }
 
+  public getStringMember(obj: AvmValue, key: string): AvmValue {
+    const value: AvmValue | undefined = this.tryGetStringMember(obj, key);
+    return value !== undefined ? value : AVM_UNDEFINED;
+  }
+
+  // Implements `GetValue` and `[[Get]]`
   public tryGetStringMember(obj: AvmValue, key: string): AvmValue | undefined {
-    return this.vm.tryGetMember(obj, key);
+    if (obj.type !== AvmValueType.Object) {
+      throw new Error("NotImplemented: ReferenceError on non-object property access");
+    }
+    if (obj.external) {
+      return obj.handler.get(key);
+    }
+    const prop: AvmObjectProperty | undefined = obj.ownProperties.get(key);
+    if (prop !== undefined) {
+      return prop.value;
+    }
+    if (obj.prototype.type === AvmValueType.Object) {
+      return this.tryGetStringMember(obj.prototype, key);
+    }
+    return undefined;
   }
 
   public setMember(obj: AvmValue, key: AvmValue, value: AvmValue): void {
@@ -385,12 +427,74 @@ export class ExecutionContext implements ActionContext {
     return AvmValue.toAvmBoolean(value, SWF_VERSION);
   }
 
+  // Implementation of the ToString algorithm from ECMA 262-3, section 9.8
   public toAvmString(avmValue: AvmValue): AvmString {
-    return AvmValue.toAvmString(avmValue, SWF_VERSION);
+    const primitive: AvmPrimitive = this.toAvmPrimitive(avmValue, ToPrimitiveHint.String);
+    switch (primitive.type) {
+      case AvmValueType.Boolean:
+        return AvmValue.fromHostString(primitive.value ? "true" : "false");
+      case AvmValueType.Null:
+        return AvmValue.fromHostString("null");
+      case AvmValueType.Number:
+        return AvmValue.fromHostString(primitive.value.toString(10));
+      case AvmValueType.String:
+        return primitive;
+      case AvmValueType.Undefined:
+        return AvmValue.fromHostString("undefined");
+      default:
+        throw new Error(`UnexpectedAvmPrimitiveType: ${primitive}`);
+    }
+  }
+
+  // Implementation of the ToPrimitive algorithm from ECMA 262-3, section 9.1
+  // TODO: Make it private?
+  public toAvmPrimitive(value: AvmValue, hint?: ToPrimitiveHint): AvmPrimitive {
+    return AvmValue.isPrimitive(value) ? value : this.getDefaultValue(value, hint);
+  }
+
+  // Implementation of the [[DefaultValue]](hint) algorithm from ECMA 262-3, section 8.6.2.6
+  // TODO: Make it private? Merge it with `toAvmPrimitive`?
+  public getDefaultValue(obj: AvmObject, hint?: ToPrimitiveHint): AvmPrimitive {
+    if (hint !== ToPrimitiveHint.String) {
+      throw new Error("NotImplemented: `getDefaultValue` with non string hint");
+    }
+
+    // 1. Call the [[Get]] method of object O with argument "toString".
+    const toStringFn: AvmValue = this.getStringMember(obj, "toString");
+    // 2. If Result(1) is not an object, go to step 5.
+    if (toStringFn.type === AvmValueType.Object) {
+      // 3. Call the [[Call]] method of Result(1), with O as the this value and an empty argument list.
+      const toStringResult: AvmValue = this.apply(toStringFn, obj, []);
+      // 4. If Result(3) is a primitive value, return Result(3).
+      if (AvmValue.isPrimitive(toStringResult)) {
+        return toStringResult;
+      }
+    }
+    // 5. Call the [[Get]] method of object O with argument "valueOf".
+    const valueOfFn: AvmValue = this.getStringMember(obj, "valueOf");
+    // 6. If Result(5) is not an object, go to step 9.
+    if (valueOfFn.type === AvmValueType.Object) {
+      // 7. Call the [[Call]] method of Result(5), with O as the this value and an empty argument list.
+      const valueOfResult: AvmValue = this.apply(valueOfFn, obj, []);
+      // 8. If Result(7) is a primitive value, return Result(7).
+      if (AvmValue.isPrimitive(valueOfResult)) {
+        return valueOfResult;
+      }
+    }
+    // 9. Throw a TypeError exception.
+    throw new Error("NotImplemented: TypeError on `getDefaultValue` failure");
   }
 
   public toHostString(value: AvmValue): string {
     return this.toAvmString(value).value;
+  }
+
+  public toAvmNumber(value: AvmValue): AvmNumber {
+    return AvmValue.toAvmNumber(value, SWF_VERSION);
+  }
+
+  public toHostNumber(value: AvmValue): number {
+    return this.toAvmNumber(value).value;
   }
 
   public getVar(varName: string): AvmValue {
@@ -459,7 +563,7 @@ export class ExecutionContext implements ActionContext {
     }
     switch (action.action) {
       case ActionType.CallFunction:
-        this.execCallFunction();
+        actions.callFunction(this);
         break;
       case ActionType.CallMethod:
         this.execCallMethod();
@@ -468,7 +572,7 @@ export class ExecutionContext implements ActionContext {
         this.execConstantPool(action);
         break;
       case ActionType.DefineLocal:
-        this.execDefineLocal();
+        actions.defineLocal(this);
         break;
       case ActionType.DefineFunction:
         this.execDefineFunction(action);
@@ -477,10 +581,10 @@ export class ExecutionContext implements ActionContext {
         this.execEquals2();
         break;
       case ActionType.GetMember:
-        this.execGetMember();
+        actions.getMember(this);
         break;
       case ActionType.GetVariable:
-        this.execGetVariable();
+        actions.getVariable(this);
         break;
       case ActionType.GotoFrame:
         this.execGotoFrame(action);
@@ -496,6 +600,9 @@ export class ExecutionContext implements ActionContext {
         break;
       case ActionType.Less2:
         this.execLess2();
+        break;
+      case ActionType.NewObject:
+        actions.newObject(this);
         break;
       case ActionType.Not:
         this.execNot();
@@ -516,7 +623,7 @@ export class ExecutionContext implements ActionContext {
         this.execSetTarget(action);
         break;
       case ActionType.SetVariable:
-        this.execSetVariable();
+        actions.setVariable(this);
         break;
       case ActionType.Stop:
         this.execStop();
@@ -547,31 +654,13 @@ export class ExecutionContext implements ActionContext {
     }
   }
 
-  private execCallFunction(): void {
-    const fnName: AvmValue = this.pop();
-    const argCount: AvmValue = this.pop();
-
-    const fnNameStr: string = this.toHostString(fnName);
-    const argCountNum: number = AvmValue.toAvmNumber(argCount, SWF_VERSION).value;
-
-    if (argCountNum !== 0) {
-      throw new Error("NotImplemented: CallFunction with arguments");
-    }
-    const fn: AvmValue = this.getVar(fnNameStr);
-
-    const result: AvmValue = this.apply(fn, AVM_UNDEFINED, []);
-
-    this.stack.push(result);
-  }
-
   private execCallMethod(): void {
-    const avmKey: AvmValue = this.stack.pop();
-    if (avmKey.type === AvmValueType.Undefined) {
+    const key: AvmValue = this.stack.pop();
+    if (key.type === AvmValueType.Undefined) {
       throw new Error("NotImplemented: undefined key for execCallMethod");
     }
-    const key: string = this.toAvmString(avmKey).value;
     const obj: AvmValue = this.stack.pop();
-    const method: AvmValue = this.vm.getMember(obj, key);
+    const method: AvmValue = this.getMember(obj, key);
     const avmArgCount: AvmValue = this.stack.pop();
     const argCount: number = this.toUintSize(avmArgCount);
     const args: AvmValue[] = [];
@@ -588,12 +677,6 @@ export class ExecutionContext implements ActionContext {
       pool.push({type: AvmValueType.String as AvmValueType.String, value});
     }
     this.constantPool.set(pool);
-  }
-
-  private execDefineLocal(): void {
-    const value: AvmValue = this.stack.pop();
-    const name: string = this.toHostString(this.stack.pop());
-    this.localVar(name, value);
   }
 
   private execDefineFunction(action: CfgDefineFunction): void {
@@ -627,18 +710,6 @@ export class ExecutionContext implements ActionContext {
     const left: AvmValue = this.stack.pop();
     const result: AvmBoolean = AvmValue.fromHostBoolean(this.abstractEquals(left, right));
     this.push(result);
-  }
-
-  private execGetMember(): void {
-    const key: AvmValue = this.pop();
-    const target: AvmValue = this.pop();
-    this.push(this.getMember(target, key));
-  }
-
-  private execGetVariable(): void {
-    const name: string = this.toHostString(this.pop());
-    const value: AvmValue = this.getVar(name);
-    this.push(value);
   }
 
   private execGotoFrame(action: GotoFrame): void {
@@ -767,15 +838,6 @@ export class ExecutionContext implements ActionContext {
     }
   }
 
-  private execSetVariable(): void {
-    const value: AvmValue = this.stack.pop();
-    const path: string = this.toAvmString(this.stack.pop()).value;
-    if (path.indexOf(":") >= 0) {
-      throw new Error("NotImplemented: SetVariableInRemoteTarget");
-    }
-    this.setVar(path, value);
-  }
-
   private execStop(): void {
     if (this.target === null) {
       console.warn("NoCurrentTarget");
@@ -798,9 +860,10 @@ export class ExecutionContext implements ActionContext {
 
   private execTrace(): void {
     const message: AvmValue = this.stack.pop();
+    // TODO: Remove `undefined` special case? Does not seem necessary
     const messageStr: AvmString = message.type === AvmValueType.Undefined
-      ? {type: AvmValueType.String as AvmValueType.String, value: "undefined"}
-      : AvmValue.toAvmString(message, SWF_VERSION);
+      ? AvmValue.fromHostString("undefined")
+      : this.toAvmString(message);
     this.host.trace(messageStr.value);
   }
 
@@ -816,7 +879,6 @@ export class ExecutionContext implements ActionContext {
     }
     const progress: { loaded: UintSize; total: UintSize } = target.getFrameLoadingProgress();
 
-    // Note:
     // - `action.frame` is 0-indexed.
     // - `progress.loaded` returns values in `[0, progress.total]` (inclusive) but since we are
     //   running the script, the first frame should be loaded and we can expected

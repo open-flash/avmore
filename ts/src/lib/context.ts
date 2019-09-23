@@ -12,6 +12,10 @@ export interface BaseContext {
 
   toHostString(value: AvmValue): string;
 
+  toHostNumber(value: AvmValue): number;
+
+  getMember(obj: AvmValue, name: AvmValue): AvmValue;
+
   setMember(obj: AvmValue, name: AvmValue, value: AvmValue): void;
 
   setStringMember(obj: AvmValue, name: string, value: AvmValue): void;
