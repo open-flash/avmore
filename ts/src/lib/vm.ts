@@ -11,8 +11,8 @@ import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
 import { CfgLabel } from "avm1-tree/cfg-label";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
-import { Incident } from "incident";
 import { UintSize } from "semantic-types";
+import * as actions from "./actions";
 import {
   AVM_FALSE,
   AVM_NULL,
@@ -21,10 +21,8 @@ import {
   AVM_UNDEFINED,
   AVM_ZERO,
   AvmBoolean,
-  AvmCallResult,
   AvmExternalHandler,
   AvmExternalObject,
-  AvmFunction,
   AvmNull,
   AvmNumber,
   AvmObject,
@@ -33,13 +31,13 @@ import {
   AvmString,
   AvmValue,
   AvmValueType,
-  Callable,
-  CallableType,
 } from "./avm-value";
+import { ActionContext } from "./context";
 import { ReferenceToUndeclaredVariableWarning } from "./error";
+import { AvmCallResult, AvmFunction, Callable, CallableType, CallType } from "./function";
 import { Host, Target } from "./host";
 import { Realm } from "./realm";
-import { AvmScope, DynamicScope, StaticScope } from "./scope";
+import { AvmScope, ScopeType, StaticScope } from "./scope";
 
 const SWF_VERSION: number = 8;
 
@@ -97,7 +95,9 @@ export class Vm {
     if (script === undefined) {
       throw new Error(`ScriptNotFound: ${scriptId}`);
     }
-    const scope: AvmScope = script.rootScope !== null ? new DynamicScope(script.rootScope) : new StaticScope();
+    const scope: AvmScope = script.rootScope !== null
+      ? {type: ScopeType.Dynamic, container: script.rootScope}
+      : {type: ScopeType.Static, variables: new Map()};
     const cfg: Cfg = cfgFromBytes(script.bytes);
     const activation: ScriptActivation = new ScriptActivation(cfg);
     const ectx: ExecutionContext = new ExecutionContext(this, host, script.target, activation, scope);
@@ -247,7 +247,7 @@ class FunctionActivation extends BaseActivation {
 
 type Activation = ScriptActivation | FunctionActivation;
 
-export class ExecutionContext {
+export class ExecutionContext implements ActionContext {
   public readonly vm: Vm;
   private readonly constantPool: AvmConstantPool;
   private readonly stack: AvmStack;
@@ -316,7 +316,7 @@ export class ExecutionContext {
     return true;
   }
 
-  public apply(fn: AvmValue, thisArg: AvmValue, args: ReadonlyArray<AvmValue>): AvmValue {
+  public apply(fn: AvmValue, thisArg: AvmValue, args: ReadonlyArray<AvmValue>): AvmCallResult {
     if (fn.type !== AvmValueType.Object) {
       throw new Error("CannotApplyNonObject");
     }
@@ -336,7 +336,11 @@ export class ExecutionContext {
 
       if (callable.type === CallableType.Avm) {
         const frame: FunctionActivation = new FunctionActivation(callable.body);
-        const scope: StaticScope = new StaticScope();
+        const scope: StaticScope = {
+          type: ScopeType.Static,
+          variables: new Map(),
+          parent: callable.parentScope,
+        };
         const childCtx: ExecutionContext = new ExecutionContext(this.vm, this.host, this.defaultTarget, frame, scope);
         const MAX_STEPS: UintSize = 1000;
         for (let step: UintSize = 0; step < MAX_STEPS; step++) {
@@ -347,13 +351,105 @@ export class ExecutionContext {
         }
         return frame.returnValue;
       } else { // CallableType.Host
-        const [isThrow, value]: AvmCallResult = callable.handler({thisArg, args});
-        if (isThrow) {
-          throw new Incident("HostFunctionThrow", {value});
-        }
-        return value;
+        return callable.handler({type: CallType.Apply, thisArg, args});
       }
     }
+  }
+
+  public construct(_fn: AvmValue, _args: ReadonlyArray<AvmValue>): AvmCallResult {
+    throw new Error("NotImplemented");
+  }
+
+  public getMember(obj: AvmValue, key: AvmValue): AvmValue {
+    const value: AvmValue | undefined = this.tryGetMember(obj, key);
+    return value !== undefined ? value : AVM_UNDEFINED;
+  }
+
+  public tryGetMember(obj: AvmValue, key: AvmValue): AvmValue | undefined {
+    return this.tryGetStringMember(obj, this.toHostString(key));
+  }
+
+  public tryGetStringMember(obj: AvmValue, key: string): AvmValue | undefined {
+    return this.vm.tryGetMember(obj, key);
+  }
+
+  public setMember(obj: AvmValue, key: AvmValue, value: AvmValue): void {
+    this.setStringMember(obj, this.toHostString(key), value);
+  }
+
+  public setStringMember(obj: AvmValue, key: string, value: AvmValue): void {
+    this.vm.setMember(obj, key, value);
+  }
+
+  public toAvmBoolean(value: AvmValue): AvmValue {
+    return AvmValue.toAvmBoolean(value, SWF_VERSION);
+  }
+
+  public toAvmString(avmValue: AvmValue): AvmString {
+    return AvmValue.toAvmString(avmValue, SWF_VERSION);
+  }
+
+  public toHostString(value: AvmValue): string {
+    return this.toAvmString(value).value;
+  }
+
+  public getVar(varName: string): AvmValue {
+    let cur: AvmScope | undefined = this.scope;
+    while (cur !== undefined) {
+      let value: AvmValue | undefined;
+      if (cur.type === ScopeType.Dynamic) {
+        value = this.tryGetStringMember(cur.container, varName);
+      } else { // ScopeType.Static
+        value = cur.variables.get(varName);
+      }
+      if (value !== undefined) {
+        return value;
+      }
+      cur = cur.parent;
+    }
+    this.host.warn(new ReferenceToUndeclaredVariableWarning(varName));
+    // TODO: Warn (variable not found)
+    return AVM_UNDEFINED;
+  }
+
+  public setVar(varName: string, value: AvmValue): void {
+    let cur: AvmScope | undefined = this.scope;
+    while (cur !== undefined) {
+      let hasVar: boolean;
+      if (cur.type === ScopeType.Dynamic) {
+        hasVar = this.tryGetStringMember(cur.container, varName) !== undefined;
+      } else { // ScopeType.Static
+        hasVar = cur.variables.has(varName);
+      }
+      if (hasVar) {
+        break;
+      }
+      cur = cur.parent;
+    }
+    if (cur === undefined) {
+      cur = this.scope;
+    }
+    if (cur.type === ScopeType.Dynamic) {
+      this.setStringMember(cur.container, varName, value);
+    } else { // ScopeType.Static
+      cur.variables.set(varName, value);
+    }
+  }
+
+  public localVar(varName: string, value: AvmValue): void {
+    if (this.scope.type === ScopeType.Dynamic) {
+      this.setStringMember(this.scope.container, varName, value);
+    } else { // ScopeType.Static
+      this.scope.variables.set(varName, value);
+    }
+  }
+
+  public push(value: AvmValue): void {
+    this.stack.push(value);
+  }
+
+  public pop(): AvmValue {
+    return this.stack.pop();
   }
 
   public exec(action: CfgAction): void {
@@ -408,13 +504,13 @@ export class ExecutionContext {
         this.execPlay();
         break;
       case ActionType.Pop:
-        this.execPop();
+        actions.pop(this);
         break;
       case ActionType.Push:
         this.execPush(action);
         break;
       case ActionType.PushDuplicate:
-        this.execPushDuplicate();
+        actions.pushDuplicate(this);
         break;
       case ActionType.SetTarget:
         this.execSetTarget(action);
@@ -452,17 +548,16 @@ export class ExecutionContext {
   }
 
   private execCallFunction(): void {
-    const fnName: AvmValue = this.stack.pop();
-    const argCount: AvmValue = this.stack.pop();
+    const fnName: AvmValue = this.pop();
+    const argCount: AvmValue = this.pop();
 
-    const fnNameStr: AvmString = AvmValue.toAvmString(fnName, SWF_VERSION);
-    const argCountNum: AvmNumber = AvmValue.toAvmNumber(argCount, SWF_VERSION);
+    const fnNameStr: string = this.toHostString(fnName);
+    const argCountNum: number = AvmValue.toAvmNumber(argCount, SWF_VERSION).value;
 
-    if (argCountNum.value !== 0) {
+    if (argCountNum !== 0) {
       throw new Error("NotImplemented: CallFunction with arguments");
     }
-    const _fn: AvmValue | undefined = this.scope.get(fnNameStr.value, this);
-    const fn: AvmValue = _fn !== undefined ? _fn : AVM_UNDEFINED;
+    const fn: AvmValue = this.getVar(fnNameStr);
 
     const result: AvmValue = this.apply(fn, AVM_UNDEFINED, []);
 
@@ -497,8 +592,8 @@ export class ExecutionContext {
 
   private execDefineLocal(): void {
     const value: AvmValue = this.stack.pop();
-    const name: string = this.toAvmString(this.stack.pop()).value;
-    this.scope.set(name, value, this);
+    const name: string = this.toHostString(this.stack.pop());
+    this.localVar(name, value);
   }
 
   private execDefineFunction(action: CfgDefineFunction): void {
@@ -508,6 +603,7 @@ export class ExecutionContext {
       parameters: action.parameters,
       registerCount: 4,
       body: action.body,
+      parentScope: this.scope,
     };
 
     const fnObj: AvmSimpleObject = {
@@ -520,32 +616,29 @@ export class ExecutionContext {
     };
 
     if (fn.name !== undefined && fn.name.length > 0) {
-      this.scope.set(fn.name, fnObj, this);
+      this.localVar(fn.name, fnObj);
     }
 
-    this.stack.push(fnObj);
+    this.push(fnObj);
   }
 
   private execEquals2(): void {
     const right: AvmValue = this.stack.pop();
     const left: AvmValue = this.stack.pop();
     const result: AvmBoolean = AvmValue.fromHostBoolean(this.abstractEquals(left, right));
-    this.stack.push(result);
+    this.push(result);
   }
 
   private execGetMember(): void {
-    const key: string = this.toAvmString(this.stack.pop()).value;
-    const target: AvmValue = this.stack.pop();
-    this.stack.push(this.vm.getMember(target, key));
+    const key: AvmValue = this.pop();
+    const target: AvmValue = this.pop();
+    this.push(this.getMember(target, key));
   }
 
   private execGetVariable(): void {
-    const name: string = this.toAvmString(this.stack.pop()).value;
-    const value: AvmValue | undefined = this.scope.get(name, this);
-    if (value === undefined) {
-      this.host.warn(new ReferenceToUndeclaredVariableWarning(name));
-    }
-    this.stack.push(value !== undefined ? value : AVM_UNDEFINED);
+    const name: string = this.toHostString(this.pop());
+    const value: AvmValue = this.getVar(name);
+    this.push(value);
   }
 
   private execGotoFrame(action: GotoFrame): void {
@@ -633,10 +726,6 @@ export class ExecutionContext {
     }
   }
 
-  private execPop(): void {
-    this.stack.pop();
-  }
-
   private execPush(action: Push): void {
     for (const value of action.values) {
       switch (value.type) {
@@ -670,12 +759,6 @@ export class ExecutionContext {
     }
   }
 
-  private execPushDuplicate(): void {
-    const top: AvmValue = this.stack.pop();
-    this.stack.push(top);
-    this.stack.push(top);
-  }
-
   private execSetTarget(action: SetTarget): void {
     if (action.targetName === "") {
       this.target = this.defaultTarget;
@@ -685,14 +768,12 @@ export class ExecutionContext {
   }
 
   private execSetVariable(): void {
-    // TODO: Check/fix scope selection (not always the closest one)
     const value: AvmValue = this.stack.pop();
     const path: string = this.toAvmString(this.stack.pop()).value;
     if (path.indexOf(":") >= 0) {
       throw new Error("NotImplemented: SetVariableInRemoteTarget");
     }
-    const name: string = path;
-    this.scope.set(name, value, this);
+    this.setVar(path, value);
   }
 
   private execStop(): void {
@@ -748,10 +829,6 @@ export class ExecutionContext {
     if (isRequestedFrameLoaded) {
       this.skipCount = action.skipCount;
     }
-  }
-
-  private toAvmString(avmValue: AvmValue): AvmString {
-    return AvmValue.toAvmString(avmValue, SWF_VERSION);
   }
 
   private toUintSize(avmValue: AvmValue): number {

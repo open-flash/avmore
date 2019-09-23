@@ -1,12 +1,5 @@
-import {
-  AVM_NULL,
-  AvmCallContext,
-  AvmCallResult,
-  AvmObject, AvmSimpleObject,
-  AvmValueType,
-  CallableType,
-  HostCallHandler,
-} from "./avm-value";
+import { AVM_NULL, AvmObject, AvmSimpleObject, AvmValue, AvmValueType } from "./avm-value";
+import { AvmCallResult, CallableType, HostCallContext, HostCallHandler } from "./function";
 
 export class Realm {
   public readonly objectProto: AvmObject;
@@ -76,12 +69,17 @@ function bindingFromHostFunction(funcProto: AvmObject, handler: HostCallHandler)
 }
 
 namespace objectBindings {
-  export function toString(call: AvmCallContext): AvmCallResult {
+  export function toString(call: HostCallContext): AvmCallResult {
     if (call.thisArg.type !== AvmValueType.Object) {
       throw new Error("NotImplemented: Object::toString on non-object");
     }
-    const className: string = call.thisArg.external ? call.thisArg.handler.getClass() : call.thisArg.class;
-    const value: string = `[object ${className}]`;
-    return [false, {type: AvmValueType.String, value}];
+    let tag: string;
+    if (call.thisArg.external) {
+      tag = call.thisArg.handler.toStringTag !== undefined ? call.thisArg.handler.toStringTag : "Object";
+    } else {
+      tag = call.thisArg.class;
+    }
+    const value: string = `[object ${tag}]`;
+    return AvmValue.fromHostString(value);
   }
 }

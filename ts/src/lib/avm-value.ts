@@ -1,5 +1,4 @@
-import { Cfg } from "avm1-tree/cfg";
-import { UintSize } from "semantic-types";
+import { AvmCallResult, AvmFunction, Callable } from "./function";
 
 export enum AvmValueType {
   Boolean,
@@ -11,16 +10,20 @@ export enum AvmValueType {
 }
 
 export interface AvmExternalHandler {
+  // Tag used in the default string description of an object.
+  // Accessed by `Object.prototype.toString`.
+  // Corresponds to `@@toStringTag` in recent ECMA-262 versions.
+  toStringTag?: string;
+
   ownKeys(): AvmValue[];
 
-  apply?(thisArg: AvmValue | undefined, args: ReadonlyArray<AvmValue>): AvmValue;
+  apply?(thisArg: AvmValue | undefined, args: ReadonlyArray<AvmValue>): AvmCallResult;
+
+  // construct?(thisArg: AvmValue | undefined, args: ReadonlyArray<AvmValue>): AvmValue;
 
   set(key: string, value: AvmValue): void;
 
   get(key: string): AvmValue | undefined;
-
-  // Class name to use for `Object.prototype.toString`
-  getClass(): string;
 }
 
 export interface AvmExternalObject {
@@ -56,28 +59,6 @@ export interface AvmObjectProperty {
   readonly value: AvmValue;
 }
 
-export enum CallableType {
-  Avm,
-  Host,
-}
-
-export type Callable = AvmFunction | HostFunction;
-
-export interface AvmFunction {
-  readonly type: CallableType.Avm;
-  // scriptId
-  name?: string;
-  // TODO: Support parameters with registers
-  parameters: string[];
-  registerCount: UintSize;
-  body: Cfg;
-}
-
-export interface HostFunction {
-  readonly type: CallableType.Host;
-  handler: HostCallHandler;
-}
-
 export interface AvmSimpleObject {
   readonly type: AvmValueType.Object;
   readonly external: false;
@@ -89,23 +70,6 @@ export interface AvmSimpleObject {
 }
 
 export type AvmObject = AvmExternalObject | AvmSimpleObject;
-
-/**
- * A call result is a tuple `[isThrow, value]`.
- *
- * `result[0]` is a boolean indicating if the result is a `throw` or `return`:
- * - if `false`, then `result[1]` is a "return value"
- * - if `true`, then `result[1]` is a "throw value"
- */
-export type AvmCallResult = [boolean, AvmValue];
-
-export interface AvmCallContext {
-  readonly thisArg: AvmObject | AvmUndefined;
-  readonly args: ReadonlyArray<AvmValue>;
-  readonly callee?: AvmFunction;
-}
-
-export type HostCallHandler = (call: AvmCallContext) => AvmCallResult;
 
 export type AvmValue = AvmBoolean
   | AvmNull
@@ -122,6 +86,9 @@ export const AvmValue = {
   // }
   fromHostBoolean(bool: boolean): AvmBoolean {
     return bool ? AVM_TRUE : AVM_FALSE;
+  },
+  fromHostString(value: string): AvmString {
+    return {type: AvmValueType.String, value};
   },
   // Implementation of the ToNumber algorithm from ECMA 262-3, section 9.3
   toAvmBoolean(avmValue: AvmValue, _swfVersion: number): AvmBoolean {
