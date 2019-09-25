@@ -7,7 +7,7 @@ import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
 import { NullableCfgLabel } from "avm1-tree/cfg-label";
-import { Uint32, UintSize } from "semantic-types";
+import { Sint32, Uint32, UintSize } from "semantic-types";
 import * as actions from "./actions";
 import {
   AVM_FALSE,
@@ -610,8 +610,15 @@ export class ExecutionContext implements ActionContext {
     return this.toAvmNumber(value).value;
   }
 
-  public toHostUint32(_value: AvmValue): Uint32 {
-    throw new Error("NotImplemented");
+  // Implementation of the ToInt32 algorithm from ECMA 262-3, section 9.5
+  public toHostSint32(value: AvmValue): Sint32 {
+    return this.toHostNumber(value) | 0;
+  }
+
+  // Implementation of the ToUint32 algorithm from ECMA 262-3, section 9.6
+  public toHostUint32(value: AvmValue): Uint32 {
+    const result: Sint32 = this.toHostNumber(value) | 0;
+    return result < 0 ? 2 ** 32 + result : result;
   }
 
   public toHostBoolean(value: AvmValue): boolean {
@@ -710,6 +717,68 @@ export class ExecutionContext implements ActionContext {
       // 11. Return Result(10).
       return AvmValue.fromHostNumber(result);
     }
+  }
+
+  // Implements the left shift operation as defined in ECMA-262-3, section 11.7.1
+  // ("The Left Shift Operator ( << )")
+  public leftShift(left: AvmValue, right: AvmValue): AvmNumber {
+    // 1. Evaluate ShiftExpression.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate AdditiveExpression.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToInt32(Result(2)).
+    const leftSint32: Sint32 = this.toHostSint32(left);
+    // 6. Call ToUint32(Result(4)).
+    const rightUint32: Uint32 = this.toHostUint32(right);
+    // 7. Mask out all but the least significant 5 bits of Result(6), that is, compute Result(6) & 0x1F.
+    // 8. Left shift Result(5) by Result(7) bits. The result is a signed 32 bit integer.
+    // 9. Return Result(8).
+    return AvmValue.fromHostNumber(leftSint32 << rightUint32);
+  }
+
+  // Implements the signed right shift operation as defined in ECMA-262-3, section 11.7.2
+  // ("The Signed Right Shift Operator ( >> )")
+  public signedRightShift(left: AvmValue, right: AvmValue): AvmNumber {
+    // 1. Evaluate ShiftExpression.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate AdditiveExpression.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToInt32(Result(2)).
+    const leftSint32: Sint32 = this.toHostSint32(left);
+    // 6. Call ToUint32(Result(4)).
+    const rightUint32: Uint32 = this.toHostUint32(right);
+    // 7. Mask out all but the least significant 5 bits of Result(6), that is, compute Result(6) & 0x1F.
+    // 8. Perform sign-extending right shift of Result(5) by Result(7) bits. The most significant
+    //    bit is propagated. The result is a signed 32 bit integer.
+    // 9. Return Result(8).
+    return AvmValue.fromHostNumber(leftSint32 >> rightUint32);
+  }
+
+  // Implements the unsigned right shift operation as defined in ECMA-262-3, section 11.7.3
+  // ("The Unsigned Right Shift Operator ( >>> )")
+  public unsignedRightShift(left: AvmValue, right: AvmValue): AvmNumber {
+    // 1. Evaluate ShiftExpression.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate AdditiveExpression.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToInt32(Result(2)).
+    const leftSint32: Sint32 = this.toHostSint32(left);
+    // 6. Call ToUint32(Result(4)).
+    const rightUint32: Uint32 = this.toHostUint32(right);
+    // 7. Mask out all but the least significant 5 bits of Result(6), that is, compute Result(6) & 0x1F.
+    // 8. Perform zero-filling right shift of Result(5) by Result(7) bits. Vacated bits are filled
+    //    with zero. The result is an unsigned 32 bit integer.
+    // 9. Return Result(8).
+    return AvmValue.fromHostNumber(leftSint32 >>> rightUint32);
   }
 
   public exec(action: CfgAction): void {

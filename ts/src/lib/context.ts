@@ -50,6 +50,12 @@ export interface BaseContext {
   // Operators
 
   add(left: AvmValue, right: AvmValue): AvmString | AvmNumber;
+
+  leftShift(left: AvmValue, right: AvmValue): AvmNumber;
+
+  signedRightShift(left: AvmValue, right: AvmValue): AvmNumber;
+
+  unsignedRightShift(left: AvmValue, right: AvmValue): AvmNumber;
 }
 
 export interface ScopeContext {

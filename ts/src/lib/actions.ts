@@ -15,6 +15,15 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.Add2:
       add2(ctx);
       break;
+    case ActionType.BitLShift:
+      bitLShift(ctx);
+      break;
+    case ActionType.BitRShift:
+      bitRShift(ctx);
+      break;
+    case ActionType.BitURShift:
+      bitURShift(ctx);
+      break;
     case ActionType.CallFunction:
       callFunction(ctx);
       break;
@@ -73,6 +82,24 @@ export function add2(ctx: ActionContext): void {
   const right: AvmValue = ctx.pop();
   const left: AvmValue = ctx.pop();
   ctx.push(ctx.add(left, right));
+}
+
+export function bitLShift(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.leftShift(left, right));
+}
+
+export function bitRShift(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.signedRightShift(left, right));
+}
+
+export function bitURShift(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.unsignedRightShift(left, right));
 }
 
 export function callFunction(ctx: ActionContext): void {

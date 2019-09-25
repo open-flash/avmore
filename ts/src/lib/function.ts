@@ -212,6 +212,18 @@ class HostCallContextImpl implements BaseHostCallContext {
   add(left: AvmValue, right: AvmValue): AvmString | AvmNumber {
     return this.ctx.add(left, right);
   }
+
+  leftShift(left: AvmValue, right: AvmValue): AvmNumber {
+    return this.ctx.leftShift(left, right);
+  }
+
+  signedRightShift(left: AvmValue, right: AvmValue): AvmNumber {
+    return this.ctx.signedRightShift(left, right);
+  }
+
+  unsignedRightShift(left: AvmValue, right: AvmValue): AvmNumber {
+    return this.ctx.unsignedRightShift(left, right);
+  }
 }
 
 export enum CallType {
