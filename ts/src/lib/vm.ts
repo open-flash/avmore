@@ -43,7 +43,7 @@ import {
 } from "./function";
 import { Host, Target } from "./host";
 import { Realm } from "./realm";
-import { DynamicScope, Scope, StaticScope } from "./scope";
+import { DynamicScope, FunctionScope, Scope, StaticScope } from "./scope";
 import { Avm1Script, Avm1ScriptId, CfgTable } from "./script";
 import { AvmStack } from "./stack";
 
@@ -947,12 +947,24 @@ export class ExecutionContext implements ActionContext {
     }
     // assert: callable.type === CallableType.Avm
     const activation: FunctionActivation = new FunctionActivation(callable);
-    const scope: StaticScope = new StaticScope(callable.parentScope);
+    const scope: FunctionScope = new FunctionScope(callable);
 
     const stack: AvmStack = new AvmStack();
-    const registers: RegisterTable = new RegisterTable(4);
+    const registers: RegisterTable = new RegisterTable(callable.registerCount);
     // TODO: Check how the target changes across function calls
     const target: TargetId | null = callable.script.target;
+
+    // Initialize scope and registers
+    if (callable.thisState === ParameterState.Preload) {
+      registers.set(1, thisArg);
+    }
+    for (const [i, param] of callable.parameters.entries()) {
+      const value: AvmValue = i < args.length ? args[i] : AVM_UNDEFINED;
+      if (param.register !== undefined) {
+        registers.set(param.register, value);
+      }
+      scope.setLocal(this, param.name, value);
+    }
 
     const ctx: ExecutionContext = new ExecutionContext(
       this.vm,

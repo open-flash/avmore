@@ -91,23 +91,31 @@ export class DynamicScope extends BaseScope {
 export class FunctionScope extends BaseScope {
   readonly type: ScopeType.Function;
   readonly parent?: Scope;
+  readonly variables: Map<string, AvmValue>;
 
   constructor(fn: AvmFunction) {
     super();
     this.type = ScopeType.Function;
     this.parent = fn.parentScope;
+    this.variables = new Map();
   }
 
-  public setLocal(_ctx: BaseContext, _varName: string, _value: AvmValue): void {
-    throw new Error("NotImplemented");
+  public setLocal(_ctx: BaseContext, varName: string, value: AvmValue): void {
+    // TODO: Update `arguments`
+    this.variables.set(varName, value);
   }
 
-  protected tryGetLocal(_ctx: BaseContext, _varName: string): AvmValue | undefined {
-    throw new Error("NotImplemented");
+  protected tryGetLocal(_ctx: BaseContext, varName: string): AvmValue | undefined {
+    return this.variables.get(varName);
   }
 
-  protected updateLocal(_ctx: BaseContext, _varName: string, _value: AvmValue): boolean {
-    throw new Error("NotImplemented");
+  protected updateLocal(ctx: BaseContext, varName: string, value: AvmValue): boolean {
+    if (this.variables.has(varName)) {
+      this.setLocal(ctx, varName, value);
+      return true;
+    } else {
+      return false;
+    }
   }
 }
 

@@ -51,6 +51,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.PushDuplicate:
       pushDuplicate(ctx);
       break;
+    case ActionType.SetMember:
+      setMember(ctx);
+      break;
     case ActionType.SetVariable:
       setVariable(ctx);
       break;
@@ -232,12 +235,13 @@ export function newObject(ctx: ActionContext): void {
   const fnName: string = ctx.toHostString(ctx.pop());
   const argCount: number = ctx.toHostNumber(ctx.pop());
 
-  if (argCount !== 0) {
-    throw new Error("NotImplemented: NewObject with arguments");
+  const args: AvmValue[] = [];
+  for (let i: UintSize = 0; i < argCount; i++) {
+    args.push(ctx.pop());
   }
   const fn: AvmValue = ctx.getVar(fnName);
 
-  const result: AvmValue = ctx.construct(fn, []);
+  const result: AvmValue = ctx.construct(fn, args);
 
   ctx.push(result);
 }
@@ -246,6 +250,13 @@ export function pushDuplicate(ctx: ActionContext): void {
   const top: AvmValue = ctx.pop();
   ctx.push(top);
   ctx.push(top);
+}
+
+export function setMember(ctx: ActionContext): void {
+  const value: AvmValue = ctx.pop();
+  const key: AvmValue = ctx.pop();
+  const target: AvmValue = ctx.pop();
+  ctx.setMember(target, key, value);
 }
 
 export function setVariable(ctx: ActionContext): void {
