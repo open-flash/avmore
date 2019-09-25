@@ -55,9 +55,35 @@ export interface AvmUndefined {
   readonly type: AvmValueType.Undefined;
 }
 
-export interface AvmObjectProperty {
-  readonly value: AvmValue;
+export type AvmPropDescriptor = AvmAccessorPropDescriptor | AvmDataPropDescriptor;
+
+export interface AvmAccessorPropDescriptor {
+  readonly writable: boolean;
+  readonly enumerable: boolean;
+  readonly configurable: boolean;
+  readonly value: undefined;
+  readonly get: AvmValue;
+  readonly set: AvmValue;
 }
+
+export interface AvmDataPropDescriptor {
+  readonly writable: boolean;
+  readonly enumerable: boolean;
+  readonly configurable: boolean;
+  readonly value: AvmValue;
+  readonly get: undefined;
+  readonly set: undefined;
+}
+
+// tslint:disable-next-line:typedef variable-name
+export const AvmPropDescriptor = {
+  data(value: AvmValue): AvmDataPropDescriptor {
+    return {writable: true, enumerable: true, configurable: true, value, get: undefined, set: undefined};
+  },
+  accessor(getter: any, setter: any): AvmAccessorPropDescriptor {
+    return {writable: true, enumerable: true, configurable: true, value: undefined, get: getter, set: setter};
+  },
+};
 
 export interface AvmSimpleObject {
   readonly type: AvmValueType.Object;
@@ -65,7 +91,7 @@ export interface AvmSimpleObject {
   // `Object`, `Functions, etc. (used for `.toString`)
   class: string;
   prototype: AvmObject | AvmNull;
-  readonly ownProperties: Map<string, AvmObjectProperty>;
+  readonly ownProperties: Map<string, AvmPropDescriptor>;
   callable?: Callable;
 }
 
@@ -132,3 +158,4 @@ export const AVM_FALSE: AvmBoolean = Object.freeze({type: AvmValueType.Boolean a
 export const AVM_NAN: AvmNumber = Object.freeze({type: AvmValueType.Number as AvmValueType.Number, value: NaN});
 export const AVM_ZERO: AvmNumber = Object.freeze({type: AvmValueType.Number as AvmValueType.Number, value: 0});
 export const AVM_ONE: AvmNumber = Object.freeze({type: AvmValueType.Number as AvmValueType.Number, value: 1});
+export const AVM_EMPTY_STRING: AvmString = Object.freeze(AvmValue.fromHostString(""));

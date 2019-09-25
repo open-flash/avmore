@@ -33,6 +33,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.Enumerate2:
       enumerate2(ctx);
       break;
+    case ActionType.InitArray:
+      initArray(ctx);
+      break;
     case ActionType.GetMember:
       getMember(ctx);
       break;
@@ -168,6 +171,17 @@ export function defineLocal(ctx: ActionContext): void {
   const value: AvmValue = ctx.pop();
   const name: string = ctx.toHostString(ctx.pop());
   ctx.setLocal(name, value);
+}
+
+export function initArray(ctx: ActionContext): void {
+  const len: number = ctx.toHostNumber(ctx.pop());
+
+  const items: AvmValue[] = [];
+  for (let i: UintSize = 0; i < len; i++) {
+    items.push(ctx.pop());
+  }
+
+  ctx.push(ctx.initArray(items));
 }
 
 export function getMember(ctx: ActionContext): void {

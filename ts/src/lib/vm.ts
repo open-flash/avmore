@@ -7,7 +7,7 @@ import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
 import { NullableCfgLabel } from "avm1-tree/cfg-label";
-import { UintSize } from "semantic-types";
+import { Uint32, UintSize } from "semantic-types";
 import * as actions from "./actions";
 import {
   AVM_FALSE,
@@ -21,8 +21,8 @@ import {
   AvmNull,
   AvmNumber,
   AvmObject,
-  AvmObjectProperty,
   AvmPrimitive,
+  AvmPropDescriptor,
   AvmSimpleObject,
   AvmString,
   AvmUndefined,
@@ -39,6 +39,7 @@ import {
   Callable,
   CallableType,
   CallType,
+  HostCallContext,
   ParameterState,
 } from "./function";
 import { Host, Target } from "./host";
@@ -112,7 +113,7 @@ export class Vm {
         if (target.external) {
           target.handler.set(key, value);
         } else {
-          target.ownProperties.set(key, {value});
+          target.ownProperties.set(key, AvmPropDescriptor.data(value));
         }
         break;
       }
@@ -291,9 +292,16 @@ export class ExecutionContext implements ActionContext {
           flowResult = {type: FlowResultType.Simple, target};
           break;
         }
+        case CfgBlockType.Return: {
+          flowResult = {type: FlowResultType.Return, value: this.pop()};
+          break;
+        }
         case CfgBlockType.Simple: {
           flowResult = {type: FlowResultType.Simple, target: block.next};
           break;
+        }
+        case CfgBlockType.Throw: {
+          throw new AvmCatchableError(this.pop());
         }
         case CfgBlockType.Try: {
           const tryTable: CfgTable = new CfgTable(block.try);
@@ -307,8 +315,12 @@ export class ExecutionContext implements ActionContext {
           try {
             flowResult = this.runCfg(tryTable);
           } catch (e) {
+            if (!(e instanceof AvmCatchableError)) {
+              throw e;
+            }
+
             // TODO try/finally
-            if (catchTable !== undefined && e instanceof AvmCatchableError) {
+            if (catchTable !== undefined) {
               // TODO: Add error value to scope
               flowResult = this.runCfg(catchTable);
             } else {
@@ -375,7 +387,7 @@ export class ExecutionContext implements ActionContext {
       if (thisArg.type !== AvmValueType.Object && thisArg.type !== AvmValueType.Undefined) {
         throw new Error("NotImplemented: NonObjectThisArg");
       }
-      return this.call(callable, thisArg, args);
+      return this.call(callable, CallType.Apply, thisArg, args);
     }
   }
 
@@ -403,7 +415,7 @@ export class ExecutionContext implements ActionContext {
         callable: undefined,
       };
 
-      this.call(callable, thisArg, args);
+      this.call(callable, CallType.Construct, thisArg, args);
       return thisArg;
     }
   }
@@ -472,8 +484,11 @@ export class ExecutionContext implements ActionContext {
     if (obj.external) {
       return obj.handler.get(key);
     }
-    const prop: AvmObjectProperty | undefined = obj.ownProperties.get(key);
+    const prop: AvmPropDescriptor | undefined = obj.ownProperties.get(key);
     if (prop !== undefined) {
+      if (prop.value === undefined) {
+        throw new Error("NotImplemented: AccessorProperties");
+      }
       return prop.value;
     }
     if (obj.prototype.type === AvmValueType.Object) {
@@ -595,8 +610,21 @@ export class ExecutionContext implements ActionContext {
     return this.toAvmNumber(value).value;
   }
 
+  public toHostUint32(_value: AvmValue): Uint32 {
+    throw new Error("NotImplemented");
+  }
+
   public toHostBoolean(value: AvmValue): boolean {
     return this.toAvmBoolean(value).value;
+  }
+
+  public initArray(array: ReadonlyArray<AvmValue>): AvmValue {
+    const result: AvmValue = this.construct(this.vm.realm.arrayClass, []);
+    this.setStringMember(result, "length", AvmValue.fromHostNumber(array.length));
+    for (const [i, item] of array.entries()) {
+      this.setStringMember(result, i.toString(10), item);
+    }
+    return result;
   }
 
   public getVar(varName: string): AvmValue {
@@ -790,7 +818,7 @@ export class ExecutionContext implements ActionContext {
     for (let _: number = 0; _ < propertyCount; _++) {
       const value: AvmValue = this.stack.pop();
       const key: string = this.toAvmString(this.stack.pop()).value;
-      obj.ownProperties.set(key, {value});
+      obj.ownProperties.set(key, AvmPropDescriptor.data(value));
     }
     this.stack.push(obj);
   }
@@ -1017,9 +1045,14 @@ export class ExecutionContext implements ActionContext {
     }
   }
 
-  private call(callable: Callable, thisArg: AvmObject | AvmUndefined, args: ReadonlyArray<AvmValue>): AvmCallResult {
+  private call(
+    callable: Callable,
+    callType: CallType,
+    thisArg: AvmObject | AvmUndefined,
+    args: ReadonlyArray<AvmValue>,
+  ): AvmCallResult {
     if (callable.type === CallableType.Host) {
-      return callable.handler({type: CallType.Apply, thisArg, args});
+      return callable.handler(HostCallContext.auto(this, callType, thisArg, args));
     }
     // assert: callable.type === CallableType.Avm
     const activation: FunctionActivation = new FunctionActivation(callable);

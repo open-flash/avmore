@@ -1,4 +1,4 @@
-import { UintSize } from "semantic-types";
+import { Uint32, UintSize } from "semantic-types";
 import { AvmBoolean, AvmNumber, AvmSimpleObject, AvmString, AvmUndefined, AvmValue } from "./avm-value";
 import { AvmCallResult, AvmFunctionParameter, ParameterState } from "./function";
 import { CfgTable } from "./script";
@@ -27,6 +27,8 @@ export interface BaseContext {
 
   toHostBoolean(value: AvmValue): boolean;
 
+  toHostUint32(value: AvmValue): Uint32;
+
   // Objects
 
   getOwnKeys(obj: AvmValue): AvmString[];
@@ -40,6 +42,10 @@ export interface BaseContext {
   setMember(obj: AvmValue, name: AvmValue, value: AvmValue): void;
 
   setStringMember(obj: AvmValue, name: string, value: AvmValue): void;
+
+  // Literals
+
+  initArray(array: ReadonlyArray<AvmValue>): AvmValue;
 
   // Operators
 
