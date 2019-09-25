@@ -65,6 +65,8 @@ export interface BaseContext {
 
   unsignedRightShift(left: AvmValue, right: AvmValue): AvmNumber;
 
+  instanceof(left: AvmValue, right: AvmValue): AvmBoolean;
+
   bitwiseAnd(left: AvmValue, right: AvmValue): AvmNumber;
 
   bitwiseXor(left: AvmValue, right: AvmValue): AvmNumber;

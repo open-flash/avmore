@@ -241,6 +241,10 @@ class HostCallContextImpl implements BaseHostCallContext {
     return this.ctx.unsignedRightShift(left, right);
   }
 
+  instanceof(left: AvmValue, right: AvmValue): AvmBoolean {
+    return this.ctx.instanceof(left, right);
+  }
+
   bitwiseAnd(left: AvmValue, right: AvmValue): AvmNumber {
     return this.ctx.bitwiseAnd(left, right);
   }

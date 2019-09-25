@@ -57,6 +57,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.InitArray:
       initArray(ctx);
       break;
+    case ActionType.InstanceOf:
+      instanceOf(ctx);
+      break;
     case ActionType.GetMember:
       getMember(ctx);
       break;
@@ -275,6 +278,12 @@ export function enumerate2(ctx: ActionContext): void {
   for (const key of keys) {
     ctx.push(key);
   }
+}
+
+export function instanceOf(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.instanceof(left, right));
 }
 
 export function modulo(ctx: ActionContext): void {

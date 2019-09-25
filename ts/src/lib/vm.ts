@@ -548,8 +548,13 @@ export class ExecutionContext implements ActionContext {
         return AvmValue.fromHostString(primitive.value ? "true" : "false");
       case AvmValueType.Null:
         return AvmValue.fromHostString("null");
-      case AvmValueType.Number:
-        return AvmValue.fromHostString(primitive.value.toString(10));
+      case AvmValueType.Number: {
+        let str: string = primitive.value.toString(10);
+        // Naive restriction to 14 decimals
+        // TODO: Follow Actionscript's stringification more closely
+        str = str.replace(/^(\d+\.\d{0,14})\d*$/, "$1")
+        return AvmValue.fromHostString(str);
+      }
       case AvmValueType.String:
         return primitive;
       case AvmValueType.Undefined:
@@ -858,6 +863,54 @@ export class ExecutionContext implements ActionContext {
     //    with zero. The result is an unsigned 32 bit integer.
     // 9. Return Result(8).
     return AvmValue.fromHostNumber(leftSint32 >>> rightUint32);
+  }
+
+  // Implements the instanceof operation as defined in ECMA-262-3, section 11.8.6
+  // ("The instanceof operator")
+  public instanceof(left: AvmValue, right: AvmValue): AvmBoolean {
+    // 1. Evaluate RelationalExpression.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate ShiftExpression.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. If Result(4) is not an object, throw a TypeError exception.
+    if (right.type !== AvmValueType.Object) {
+      // Flash diverges from ES-262 here: it returns false instead of throwing
+      return AVM_FALSE;
+      // throw new Error("TypeError: Right side is not an object");
+    }
+
+    // 6. If Result(4) does not have a [[HasInstance]] method, throw a TypeError exception.
+    if (right.external) {
+      throw new Error("NotImplemented: instanceof on external");
+    }
+    if (right.callable === undefined) {
+      throw new Error("TypeError: Right side is not callable");
+    }
+
+    // 7. Call the [[HasInstance]] method of Result(4) with parameter Result(2).
+    // 8. Return Result(7).
+    if (left.type !== AvmValueType.Object) {
+      return AVM_FALSE;
+    }
+    if (left.external) {
+      throw new Error("NotImplemented: instanceof on external");
+    }
+    const rightProto: AvmValue = this.getStringMember(right, "prototype");
+    if (rightProto.type !== AvmValueType.Object) {
+      throw new Error("TypeError: Right side has non-object prototype");
+    }
+    // TODO: Loop over prototype chain
+    const cur: AvmObject | AvmNull = left.prototype;
+    if (cur.type === AvmValueType.Null) {
+      return AVM_FALSE;
+    }
+    if (cur === rightProto) {
+      return AVM_TRUE;
+    }
+    return AVM_FALSE;
   }
 
   // Implements the bitwise and operation as defined in ECMA-262-3, section 11.10
