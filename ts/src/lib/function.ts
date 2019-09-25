@@ -19,6 +19,12 @@ export enum CallableType {
   Host,
 }
 
+export interface AvmFunctionParameter {
+  readonly name: string;
+  // If defined, initialize the register when calling the function
+  readonly register?: UintSize;
+}
+
 export interface AvmFunction {
   readonly type: CallableType.Avm;
   readonly parentScope: Scope;
@@ -27,7 +33,7 @@ export interface AvmFunction {
   // scriptId
   name?: string;
   // TODO: Support parameters with registers
-  parameters: string[];
+  parameters: ReadonlyArray<AvmFunctionParameter>;
   registerCount: UintSize;
   body: CfgTable;
 }

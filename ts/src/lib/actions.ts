@@ -1,9 +1,13 @@
 import { ActionType } from "avm1-tree/action-type";
 import { ConstantPool, Push, StoreRegister } from "avm1-tree/actions";
 import { CfgAction } from "avm1-tree/cfg-action";
+import { CfgDefineFunction } from "avm1-tree/cfg-actions/cfg-define-function";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
-import { AVM_NULL, AVM_UNDEFINED, AvmString, AvmValue } from "./avm-value";
+import { UintSize } from "semantic-types";
+import { AVM_NULL, AVM_UNDEFINED, AvmSimpleObject, AvmString, AvmValue } from "./avm-value";
 import { ActionContext } from "./context";
+import { AvmFunctionParameter } from "./function";
+import { CfgTable } from "./script";
 
 export function action(ctx: ActionContext, action: CfgAction): void {
   switch (action.action) {
@@ -15,6 +19,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
       break;
     case ActionType.ConstantPool:
       constantPool(ctx, action);
+      break;
+    case ActionType.DefineFunction:
+      defineFunction(ctx, action);
       break;
     case ActionType.DefineLocal:
       defineLocal(ctx);
@@ -78,6 +85,25 @@ export function constantPool(ctx: ActionContext, action: ConstantPool): void {
     pool.push(AvmValue.fromHostString(value));
   }
   ctx.setConstantPool(pool);
+}
+
+export function defineFunction(ctx: ActionContext, action: CfgDefineFunction): void {
+  const name: string | undefined = action.name !== undefined && action.name.length > 0
+    ? action.name
+    : undefined;
+  const registerCount: UintSize = 4;
+  const parameters: AvmFunctionParameter[] = [];
+  for (const name of action.parameters) {
+    parameters.push({name});
+  }
+  const body: CfgTable = new CfgTable(action.body);
+
+  const fn: AvmSimpleObject = ctx.createAvmFunction(name, registerCount, parameters, body);
+
+  if (name !== undefined) {
+    ctx.setLocal(name, fn);
+  }
+  ctx.push(fn);
 }
 
 export function defineLocal(ctx: ActionContext): void {

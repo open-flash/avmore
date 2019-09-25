@@ -4,7 +4,6 @@ import { cfgFromBytes } from "avm1-parser";
 import { ActionType } from "avm1-tree/action-type";
 import { GotoFrame, SetTarget } from "avm1-tree/actions";
 import { CfgAction } from "avm1-tree/cfg-action";
-import { CfgDefineFunction } from "avm1-tree/cfg-actions/cfg-define-function";
 import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
 import { NullableCfgLabel } from "avm1-tree/cfg-label";
@@ -33,7 +32,7 @@ import {
 import { AvmConstantPool } from "./constant-pool";
 import { ActionContext, RunBudget } from "./context";
 import { ReferenceToUndeclaredVariableWarning, TargetHasNoPropertyWarning } from "./error";
-import { AvmCallResult, AvmFunction, Callable, CallableType, CallType } from "./function";
+import { AvmCallResult, AvmFunction, AvmFunctionParameter, Callable, CallableType, CallType } from "./function";
 import { Host, Target } from "./host";
 import { Realm } from "./realm";
 import { DynamicScope, Scope, StaticScope } from "./scope";
@@ -151,7 +150,7 @@ abstract class BaseActivation {
   abstract getScript(): Avm1Script;
 }
 
-class ScriptActivation extends BaseActivation {
+export class ScriptActivation extends BaseActivation {
   readonly script: Avm1Script;
 
   constructor(script: Avm1Script) {
@@ -164,7 +163,7 @@ class ScriptActivation extends BaseActivation {
   }
 }
 
-class FunctionActivation extends BaseActivation {
+export class FunctionActivation extends BaseActivation {
   readonly func: AvmFunction;
 
   constructor(func: AvmFunction) {
@@ -177,7 +176,7 @@ class FunctionActivation extends BaseActivation {
   }
 }
 
-type Activation = ScriptActivation | FunctionActivation;
+export type Activation = ScriptActivation | FunctionActivation;
 
 enum ToPrimitiveHint {
   Number,
@@ -329,6 +328,34 @@ export class ExecutionContext implements ActionContext {
       this.call(callable, thisArg, args);
       return thisArg;
     }
+  }
+
+  public createAvmFunction(
+    name: string | undefined,
+    registerCount: UintSize,
+    parameters: AvmFunctionParameter[],
+    body: CfgTable,
+  ): AvmSimpleObject {
+    const fn: AvmFunction = {
+      type: CallableType.Avm,
+      parentScope: this.scope,
+      script: this.activation.getScript(),
+      name,
+      registerCount,
+      parameters,
+      body,
+    };
+
+    const fnObj: AvmSimpleObject = {
+      type: AvmValueType.Object,
+      external: false,
+      class: "Function",
+      prototype: this.vm.realm.funcProto,
+      ownProperties: new Map(),
+      callable: fn,
+    };
+
+    return fnObj;
   }
 
   public getMember(obj: AvmValue, key: AvmValue): AvmValue {
@@ -572,9 +599,6 @@ export class ExecutionContext implements ActionContext {
       case ActionType.CallMethod:
         this.execCallMethod();
         break;
-      case ActionType.DefineFunction:
-        this.execDefineFunction(action);
-        break;
       case ActionType.Equals2:
         this.execEquals2();
         break;
@@ -632,33 +656,6 @@ export class ExecutionContext implements ActionContext {
     }
     const result: AvmValue = this.apply(method, obj, args);
     this.stack.push(result);
-  }
-
-  private execDefineFunction(action: CfgDefineFunction): void {
-    const fn: AvmFunction = {
-      type: CallableType.Avm,
-      parentScope: this.scope,
-      script: this.activation.getScript(),
-      name: action.name,
-      parameters: action.parameters,
-      registerCount: 4,
-      body: new CfgTable(action.body),
-    };
-
-    const fnObj: AvmSimpleObject = {
-      type: AvmValueType.Object,
-      external: false,
-      class: "Function",
-      prototype: this.vm.realm.funcProto,
-      ownProperties: new Map(),
-      callable: fn,
-    };
-
-    if (fn.name !== undefined && fn.name.length > 0) {
-      this.setLocal(fn.name, fnObj);
-    }
-
-    this.push(fnObj);
   }
 
   private execEquals2(): void {

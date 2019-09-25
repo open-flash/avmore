@@ -1,6 +1,7 @@
 import { UintSize } from "semantic-types";
-import { AvmBoolean, AvmNumber, AvmString, AvmUndefined, AvmValue } from "./avm-value";
-import { AvmCallResult } from "./function";
+import { AvmBoolean, AvmNumber, AvmSimpleObject, AvmString, AvmUndefined, AvmValue } from "./avm-value";
+import { AvmCallResult, AvmFunctionParameter } from "./function";
+import { CfgTable } from "./script";
 
 export interface RunBudget {
   totalActions: UintSize;
@@ -74,7 +75,12 @@ export interface ConstantPoolContext {
 }
 
 export interface ActionContext extends BaseContext, RegisterContext, ScopeContext, StackContext, ConstantPoolContext {
-  // readonly budget: RunBudget;
+  createAvmFunction(
+    name: string | undefined,
+    registerCount: UintSize,
+    parameters: AvmFunctionParameter[],
+    body: CfgTable,
+  ): AvmSimpleObject;
 }
 
 // export interface CallContext extends BaseContext {
