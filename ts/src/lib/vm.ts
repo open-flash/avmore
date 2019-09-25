@@ -185,6 +185,32 @@ enum ToPrimitiveHint {
   String,
 }
 
+enum FlowResultType {
+  Simple,
+  Return,
+}
+
+interface FlowSimple {
+  type: FlowResultType.Simple;
+  target: NullableCfgLabel;
+}
+
+interface FlowReturn {
+  type: FlowResultType.Return;
+  value: AvmValue;
+}
+
+export type FlowResult = FlowReturn | FlowSimple;
+
+// Wrapper for catchable AVM1 errors.
+class AvmCatchableError {
+  public readonly value: AvmValue;
+
+  constructor(value: AvmValue) {
+    this.value = value;
+  }
+}
+
 export class ExecutionContext implements ActionContext {
   // Global context
   private readonly vm: Vm;
@@ -243,35 +269,65 @@ export class ExecutionContext implements ActionContext {
     ctx.runCfg(script.cfgTable);
   }
 
-  public runCfg(cfgTable: CfgTable): void {
-    let block: CfgBlock | undefined = cfgTable.entryBlock;
-    while (block !== undefined) {
+  public runCfg(cfgTable: CfgTable): FlowResult {
+    if (cfgTable.entryBlock === undefined) {
+      return {type: FlowResultType.Simple, target: null};
+    }
+    let block: CfgBlock = cfgTable.entryBlock;
+    while (this.budget.totalActions < this.budget.maxActions) {
       if (this.budget.totalActions >= this.budget.maxActions) {
-        throw new Error("BudgetExhausted");
       }
       for (const action of block.actions) {
         this.exec(action);
         this.budget.totalActions++;
       }
+      let flowResult: FlowResult;
       switch (block.type) {
         case CfgBlockType.Error:
           throw new Error("CorruptedData");
         case CfgBlockType.If: {
           const test: boolean = this.toHostBoolean(this.pop());
           const target: NullableCfgLabel = test ? block.ifTrue : block.ifFalse;
-          if (target === null) {
-            block = undefined;
-          } else {
-            block = cfgTable.labelToBlock.get(target);
-          }
+          flowResult = {type: FlowResultType.Simple, target};
           break;
         }
         case CfgBlockType.Simple: {
-          if (block.next === null) {
-            block = undefined;
-          } else {
-            block = cfgTable.labelToBlock.get(block.next);
+          flowResult = {type: FlowResultType.Simple, target: block.next};
+          break;
+        }
+        case CfgBlockType.Try: {
+          const tryTable: CfgTable = new CfgTable(block.try);
+          const catchTable: CfgTable | undefined = block.catch !== undefined
+            ? new CfgTable(block.catch)
+            : undefined;
+          const finallyTable: CfgTable | undefined = block.finally !== undefined
+            ? new CfgTable(block.finally)
+            : undefined;
+
+          try {
+            flowResult = this.runCfg(tryTable);
+          } catch (e) {
+            // TODO try/finally
+            if (catchTable !== undefined && e instanceof AvmCatchableError) {
+              // TODO: Add error value to scope
+              flowResult = this.runCfg(catchTable);
+            } else {
+              throw e;
+            }
           }
+
+          // TODO Check how `return` is handled in presence of `Finally`
+
+          if (
+            finallyTable !== undefined
+            && finallyTable.entryBlock !== undefined
+            && flowResult.type === FlowResultType.Simple
+            && flowResult.target !== null
+            && flowResult.target === finallyTable.entryBlock.label
+          ) {
+            flowResult = this.runCfg(finallyTable);
+          }
+
           break;
         }
         default: {
@@ -279,7 +335,27 @@ export class ExecutionContext implements ActionContext {
         }
       }
       this.budget.totalActions++;
+      switch (flowResult.type) {
+        case FlowResultType.Return:
+          return flowResult;
+        case FlowResultType.Simple: {
+          if (flowResult.target === null) {
+            return flowResult;
+          }
+          const nextBlock: CfgBlock | undefined = cfgTable.labelToBlock.get(flowResult.target);
+          if (nextBlock === undefined) {
+            return flowResult;
+          } else {
+            block = nextBlock;
+          }
+          break;
+        }
+        default: {
+          throw new Error(`UnexpectedFlowResult: ${flowResult}`);
+        }
+      }
     }
+    throw new Error("BudgetExhausted");
   }
 
   public apply(fn: AvmValue, thisArg: AvmValue, args: ReadonlyArray<AvmValue>): AvmCallResult {
