@@ -2,14 +2,12 @@
 
 import { cfgFromBytes } from "avm1-parser";
 import { ActionType } from "avm1-tree/action-type";
-import { ConstantPool, GotoFrame, Push, SetTarget, WaitForFrame } from "avm1-tree/actions";
-import { Cfg } from "avm1-tree/cfg";
+import { ConstantPool, GotoFrame, Push, SetTarget } from "avm1-tree/actions";
 import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgDefineFunction } from "avm1-tree/cfg-actions/cfg-define-function";
-import { CfgIf } from "avm1-tree/cfg-actions/cfg-if";
 import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
-import { CfgLabel } from "avm1-tree/cfg-label";
+import { NullableCfgLabel } from "avm1-tree/cfg-label";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
 import { UintSize } from "semantic-types";
 import * as actions from "./actions";
@@ -30,15 +28,19 @@ import {
   AvmPrimitive,
   AvmSimpleObject,
   AvmString,
+  AvmUndefined,
   AvmValue,
   AvmValueType,
 } from "./avm-value";
-import { ActionContext } from "./context";
+import { AvmConstantPool } from "./constant-pool";
+import { ActionContext, RunBudget } from "./context";
 import { ReferenceToUndeclaredVariableWarning, TargetHasNoPropertyWarning } from "./error";
 import { AvmCallResult, AvmFunction, Callable, CallableType, CallType } from "./function";
 import { Host, Target } from "./host";
 import { Realm } from "./realm";
 import { AvmScope, ScopeType, StaticScope } from "./scope";
+import { Avm1Script, Avm1ScriptId, CfgTable } from "./script";
+import { AvmStack } from "./stack";
 
 const SWF_VERSION: number = 8;
 
@@ -48,29 +50,13 @@ const SWF_VERSION: number = 8;
 //   };
 // }
 
-export type Avm1ScriptId = number;
 export type TargetId = number;
-
-export interface Avm1Script {
-  readonly id: Avm1ScriptId;
-  readonly bytes: Uint8Array;
-
-  /**
-   * Default target for this script.
-   *
-   * Used for contextual actions such as `gotoAndPlay` or `stop`.
-   * Value used for `setTarget("");`
-   */
-  readonly target: TargetId | null;
-
-  /**
-   * Object to use as the root scope (dynamic scope) or `null` to use a static scope.
-   */
-  readonly rootScope: AvmValue | null;
-}
+export type MovieId = number;
 
 export class Vm {
   public readonly realm: Realm;
+  public readonly constantPool: AvmConstantPool;
+
   private nextScriptId: number;
   private readonly scriptsById: Map<Avm1ScriptId, Avm1Script>;
 
@@ -78,6 +64,7 @@ export class Vm {
     this.nextScriptId = 0;
     this.scriptsById = new Map();
     this.realm = new Realm();
+    this.constantPool = new AvmConstantPool();
   }
 
   createAvm1Script(
@@ -86,7 +73,9 @@ export class Vm {
     rootScope: AvmValue | null,
   ): Avm1ScriptId {
     const id: number = this.nextScriptId++;
-    const script: Avm1Script = {id, bytes: avm1Bytes, target, rootScope};
+    const movie: MovieId = 0;
+    const cfgTable: CfgTable = new CfgTable(cfgFromBytes(avm1Bytes));
+    const script: Avm1Script = {id, bytes: avm1Bytes, cfgTable, movie, target, rootScope};
     this.scriptsById.set(id, script);
     return id;
   }
@@ -96,23 +85,8 @@ export class Vm {
     if (script === undefined) {
       throw new Error(`ScriptNotFound: ${scriptId}`);
     }
-    const scope: AvmScope = script.rootScope !== null
-      ? {type: ScopeType.Dynamic, container: script.rootScope}
-      : {type: ScopeType.Static, variables: new Map()};
-    const cfg: Cfg = cfgFromBytes(script.bytes);
-    const activation: ScriptActivation = new ScriptActivation(cfg);
-    const ectx: ExecutionContext = new ExecutionContext(this, host, script.target, activation, scope);
-    let actionCount: number = 0;
-    while (actionCount < maxActions) {
-      const hasAdvanced: boolean = ectx.nextStep();
-      if (!hasAdvanced) {
-        break;
-      }
-      actionCount++;
-    }
-    if (actionCount === maxActions) {
-      throw new Error("ActionTimeout");
-    }
+    const budget: RunBudget = {maxActions, totalActions: 0};
+    ExecutionContext.runScript(this, host, budget, script);
   }
 
   public newExternal(handler: AvmExternalHandler): AvmExternalObject {
@@ -149,26 +123,6 @@ export class Vm {
   }
 }
 
-class AvmStack {
-  private readonly stack: AvmValue[];
-
-  constructor() {
-    this.stack = [];
-  }
-
-  public push(value: AvmValue): void {
-    this.stack.push(value);
-  }
-
-  public pop(): AvmValue {
-    return this.stack.length > 0 ? this.stack.pop()! : AVM_UNDEFINED;
-  }
-
-  public peek(): AvmValue {
-    return this.stack.length > 0 ? this.stack[this.stack.length - 1] : AVM_UNDEFINED;
-  }
-}
-
 class RegisterTable {
   private readonly table: AvmValue[];
 
@@ -195,59 +149,33 @@ class RegisterTable {
   }
 }
 
-class AvmConstantPool {
-  private readonly pool: AvmString[];
-
-  constructor() {
-    this.pool = [];
-  }
-
-  public set(pool: AvmString[]): void {
-    this.pool.splice(0, this.pool.length, ...pool);
-  }
-
-  public get(index: number): AvmValue {
-    // TODO: Warn on out-of-bound pool access?
-    // TODO: Mimick unitialized pool with the values used by Adobe's player?
-    return index < this.pool.length ? this.pool[index] : AVM_UNDEFINED;
-  }
-}
-
 abstract class BaseActivation {
-  readonly cfg: Cfg;
-  curBlock?: CfgBlock;
-  curAction: UintSize;
-
-  constructor(cfg: Cfg) {
-    this.cfg = cfg;
-    if (cfg.blocks.length > 0) {
-      this.curBlock = cfg.blocks[0];
-    }
-    this.curAction = 0;
-  }
-
-  jump(label: CfgLabel): void {
-    // TODO: Handle nesting
-    this.curBlock = undefined;
-    this.curAction = 0;
-    for (const b of this.cfg.blocks) {
-      if (b.label === label) {
-        this.curBlock = b;
-        break;
-      }
-    }
-  }
+  abstract getScript(): Avm1Script;
 }
 
 class ScriptActivation extends BaseActivation {
+  readonly script: Avm1Script;
+
+  constructor(script: Avm1Script) {
+    super();
+    this.script = script;
+  }
+
+  getScript(): Avm1Script {
+    return this.script;
+  }
 }
 
 class FunctionActivation extends BaseActivation {
-  returnValue: AvmValue;
+  readonly func: AvmFunction;
 
-  constructor(cfg: Cfg) {
-    super(cfg);
-    this.returnValue = AVM_UNDEFINED;
+  constructor(func: AvmFunction) {
+    super();
+    this.func = func;
+  }
+
+  getScript(): Avm1Script {
+    return this.func.script;
   }
 }
 
@@ -259,74 +187,100 @@ enum ToPrimitiveHint {
 }
 
 export class ExecutionContext implements ActionContext {
-  public readonly vm: Vm;
-  private readonly constantPool: AvmConstantPool;
+  // Global context
+  private readonly vm: Vm;
+  private readonly host: Host;
+
+  // Run context
+  private readonly budget: RunBudget;
+
+  // Activation context
+  private readonly activation: Activation;
+  private readonly scope: AvmScope;
   private readonly stack: AvmStack;
   private readonly registers: RegisterTable;
-  private readonly callStack: Activation[];
-  private readonly host: Host;
   private target: TargetId | null;
-  // If non-zero, skip next `skipCount` actions (used to implement `WaitForFrame`)
-  private skipCount: UintSize;
-  private readonly defaultTarget: TargetId | null;
-  private readonly scope: AvmScope;
 
   constructor(
     vm: Vm,
     host: Host,
-    defaultTarget: TargetId | null,
+    budget: RunBudget,
     activation: Activation,
     scope: AvmScope,
+    stack: AvmStack,
+    registers: RegisterTable,
+    target: TargetId | null,
   ) {
     this.vm = vm;
-    this.constantPool = new AvmConstantPool();
-    this.stack = new AvmStack();
-    this.registers = new RegisterTable();
-    this.callStack = [activation];
-    this.scope = scope;
     this.host = host;
-    this.target = defaultTarget;
-    this.defaultTarget = defaultTarget;
-    this.skipCount = 0;
+    this.budget = budget;
+    this.activation = activation;
+    this.scope = scope;
+    this.stack = stack;
+    this.registers = registers;
+    this.target = target;
   }
 
-  // Returns a boolean indicating if there was some progress
-  public nextStep(): boolean {
-    const activation: Activation | undefined = this.callStack[this.callStack.length - 1];
-    if (activation === undefined) {
-      return false;
-    }
-    const block: CfgBlock | undefined = activation.curBlock;
-    if (block === undefined) {
-      this.popCall();
-    } else {
-      if (activation.curAction < block.actions.length) {
-        const action: CfgAction = block.actions[activation.curAction];
-        if (action.action === ActionType.If) {
-          this.execIf(action);
-        } else {
-          this.exec(action);
-          activation.curAction++;
-        }
-      } else if (activation.curAction === block.actions.length) {
-        switch (block.type) {
-          case CfgBlockType.Simple:
-            if (block.next === null) {
-              this.popCall();
-            } else {
-              activation.jump(block.next);
-            }
-            break;
-          case CfgBlockType.Return:
-            throw new Error("NotImplemented: CfgBlockType.Return");
-          default:
-            throw new Error("NotImplemented: CFG block type");
-        }
-      } else {
-        this.popCall();
+  public static runScript(vm: Vm, host: Host, budget: RunBudget, script: Avm1Script): void {
+    const activation: ScriptActivation = new ScriptActivation(script);
+    const scope: AvmScope = script.rootScope !== null
+      ? {type: ScopeType.Dynamic, container: script.rootScope}
+      : {type: ScopeType.Static, variables: new Map()};
+    const stack: AvmStack = new AvmStack();
+    const registers: RegisterTable = new RegisterTable(4);
+    const target: TargetId | null = script.target; // Initialize with default target
+
+    const ctx: ExecutionContext = new ExecutionContext(
+      vm,
+      host,
+      budget,
+      activation,
+      scope,
+      stack,
+      registers,
+      target,
+    );
+
+    ctx.runCfg(script.cfgTable);
+  }
+
+  public runCfg(cfgTable: CfgTable): void {
+    let block: CfgBlock | undefined = cfgTable.entryBlock;
+    while (block !== undefined) {
+      if (this.budget.totalActions >= this.budget.maxActions) {
+        throw new Error("BudgetExhausted");
       }
+      for (const action of block.actions) {
+        this.exec(action);
+        this.budget.totalActions++;
+      }
+      switch (block.type) {
+        case CfgBlockType.Error:
+          throw new Error("CorruptedData");
+        case CfgBlockType.If: {
+          const test: boolean = this.toHostBoolean(this.pop());
+          const target: NullableCfgLabel = test ? block.ifTrue : block.ifFalse;
+          if (target === null) {
+            block = undefined;
+          } else {
+            block = cfgTable.labelToBlock.get(target);
+          }
+          break;
+        }
+        case CfgBlockType.Simple: {
+          if (block.next === null) {
+            block = undefined;
+          } else {
+            block = cfgTable.labelToBlock.get(block.next);
+          }
+          break;
+        }
+        default: {
+          throw new Error(`NotImplemented: Support for block type ${CfgBlockType[block.type]}`);
+        }
+      }
+      this.budget.totalActions++;
     }
-    return true;
   }
 
   public apply(fn: AvmValue, thisArg: AvmValue, args: ReadonlyArray<AvmValue>): AvmCallResult {
@@ -346,26 +300,7 @@ export class ExecutionContext implements ActionContext {
       if (thisArg.type !== AvmValueType.Object && thisArg.type !== AvmValueType.Undefined) {
         throw new Error("NotImplemented: NonObjectThisArg");
       }
-
-      if (callable.type === CallableType.Avm) {
-        const frame: FunctionActivation = new FunctionActivation(callable.body);
-        const scope: StaticScope = {
-          type: ScopeType.Static,
-          variables: new Map(),
-          parent: callable.parentScope,
-        };
-        const childCtx: ExecutionContext = new ExecutionContext(this.vm, this.host, this.defaultTarget, frame, scope);
-        const MAX_STEPS: UintSize = 1000;
-        for (let step: UintSize = 0; step < MAX_STEPS; step++) {
-          const hasAdvanced: boolean = childCtx.nextStep();
-          if (!hasAdvanced) {
-            break;
-          }
-        }
-        return frame.returnValue;
-      } else { // CallableType.Host
-        return callable.handler({type: CallType.Apply, thisArg, args});
-      }
+      return this.call(callable, thisArg, args);
     }
   }
 
@@ -393,24 +328,7 @@ export class ExecutionContext implements ActionContext {
         callable: undefined,
       };
 
-      if (callable.type === CallableType.Avm) {
-        const frame: FunctionActivation = new FunctionActivation(callable.body);
-        const scope: StaticScope = {
-          type: ScopeType.Static,
-          variables: new Map(),
-          parent: callable.parentScope,
-        };
-        const childCtx: ExecutionContext = new ExecutionContext(this.vm, this.host, this.defaultTarget, frame, scope);
-        const MAX_STEPS: UintSize = 1000;
-        for (let step: UintSize = 0; step < MAX_STEPS; step++) {
-          const hasAdvanced: boolean = childCtx.nextStep();
-          if (!hasAdvanced) {
-            break;
-          }
-        }
-      } else { // CallableType.Host
-        callable.handler({type: CallType.Apply, thisArg, args});
-      }
+      this.call(callable, thisArg, args);
       return thisArg;
     }
   }
@@ -546,6 +464,13 @@ export class ExecutionContext implements ActionContext {
     return this.toAvmNumber(value).value;
   }
 
+  public toHostBoolean(value: AvmValue): boolean {
+    if (value.type === AvmValueType.Boolean) {
+      return value.value;
+    }
+    throw new Error("NotImplemented: toHostBoolean on non-boolean");
+  }
+
   public getVar(varName: string): AvmValue {
     let cur: AvmScope | undefined = this.scope;
     while (cur !== undefined) {
@@ -656,40 +581,18 @@ export class ExecutionContext implements ActionContext {
   }
 
   public exec(action: CfgAction): void {
-    if (this.skipCount > 0) { // Ignore action due to `WaitForFrame` skip count
-      this.skipCount--;
-      return;
-    }
     switch (action.action) {
-      case ActionType.Add2:
-        actions.add2(this);
-        break;
-      case ActionType.CallFunction:
-        actions.callFunction(this);
-        break;
       case ActionType.CallMethod:
         this.execCallMethod();
         break;
       case ActionType.ConstantPool:
         this.execConstantPool(action);
         break;
-      case ActionType.DefineLocal:
-        actions.defineLocal(this);
-        break;
       case ActionType.DefineFunction:
         this.execDefineFunction(action);
         break;
       case ActionType.Equals2:
         this.execEquals2();
-        break;
-      case ActionType.Enumerate2:
-        actions.enumerate2(this);
-        break;
-      case ActionType.GetMember:
-        actions.getMember(this);
-        break;
-      case ActionType.GetVariable:
-        actions.getVariable(this);
         break;
       case ActionType.GotoFrame:
         this.execGotoFrame(action);
@@ -706,35 +609,20 @@ export class ExecutionContext implements ActionContext {
       case ActionType.Less2:
         this.execLess2();
         break;
-      case ActionType.NewObject:
-        actions.newObject(this);
-        break;
       case ActionType.Not:
         this.execNot();
         break;
       case ActionType.Play:
         this.execPlay();
         break;
-      case ActionType.Pop:
-        actions.pop(this);
-        break;
       case ActionType.Push:
         this.execPush(action);
-        break;
-      case ActionType.PushDuplicate:
-        actions.pushDuplicate(this);
         break;
       case ActionType.SetTarget:
         this.execSetTarget(action);
         break;
-      case ActionType.SetVariable:
-        actions.setVariable(this);
-        break;
       case ActionType.Stop:
         this.execStop();
-        break;
-      case ActionType.StoreRegister:
-        actions.storeRegister(this, action);
         break;
       case ActionType.StrictEquals:
         this.execStrictEquals();
@@ -742,23 +630,9 @@ export class ExecutionContext implements ActionContext {
       case ActionType.Trace:
         this.execTrace();
         break;
-      case ActionType.WaitForFrame:
-        this.execWaitForFrame(action);
-        break;
       default:
-        console.error(action);
-        throw new Error(`UnknownAction: ${action.action} (${ActionType[action.action]})`);
-    }
-  }
-
-  private popCall() {
-    const activation: Activation | undefined = this.callStack.pop();
-    if (activation === undefined) {
-      return;
-    }
-    if (activation instanceof FunctionActivation) {
-      // TODO: Switch on return/catch
-      this.stack.push(activation.returnValue);
+        actions.action(this, action);
+        break;
     }
   }
 
@@ -784,17 +658,18 @@ export class ExecutionContext implements ActionContext {
     for (const value of action.constantPool) {
       pool.push({type: AvmValueType.String as AvmValueType.String, value});
     }
-    this.constantPool.set(pool);
+    this.vm.constantPool.set(pool);
   }
 
   private execDefineFunction(action: CfgDefineFunction): void {
     const fn: AvmFunction = {
       type: CallableType.Avm,
+      parentScope: this.scope,
+      script: this.activation.getScript(),
       name: action.name,
       parameters: action.parameters,
       registerCount: 4,
-      body: action.body,
-      parentScope: this.scope,
+      body: new CfgTable(action.body),
     };
 
     const fnObj: AvmSimpleObject = {
@@ -839,20 +714,6 @@ export class ExecutionContext implements ActionContext {
     const abstractResult: boolean | undefined = this.abstractCompare(right, left);
     const result: AvmBoolean = AvmValue.fromHostBoolean(abstractResult === undefined ? false : abstractResult);
     this.stack.push(result);
-  }
-
-  private execIf(action: CfgIf): void {
-    const test: boolean = AvmValue.toAvmBoolean(this.stack.pop(), SWF_VERSION).value;
-    const activation: Activation = this.callStack[this.callStack.length - 1];
-    if (test) {
-      if (action.target === null) {
-        activation.curBlock = undefined;
-      } else {
-        activation.jump(action.target);
-      }
-    } else {
-      activation.curAction++;
-    }
   }
 
   private execIncrement(): void {
@@ -912,7 +773,7 @@ export class ExecutionContext implements ActionContext {
           this.stack.push({type: AvmValueType.Boolean as AvmValueType.Boolean, value: value.value});
           break;
         case AstValueType.Constant:
-          this.stack.push(this.constantPool.get(value.value));
+          this.stack.push(this.vm.constantPool.get(value.value));
           break;
         case AstValueType.Float32:
           this.stack.push({type: AvmValueType.Number as AvmValueType.Number, value: value.value});
@@ -943,7 +804,7 @@ export class ExecutionContext implements ActionContext {
 
   private execSetTarget(action: SetTarget): void {
     if (action.targetName === "") {
-      this.target = this.defaultTarget;
+      this.target = this.activation.getScript().target;
     } else {
       throw new Error("NotImplemented: execSetTarget(targetName !== \"\")");
     }
@@ -978,31 +839,31 @@ export class ExecutionContext implements ActionContext {
     this.host.trace(messageStr.value);
   }
 
-  private execWaitForFrame(action: WaitForFrame): void {
-    if (this.target === null) {
-      console.warn("NoCurrentTarget");
-      return;
-    }
-    const target: Target | undefined = this.host.getTarget(this.target);
-    if (target === undefined) {
-      console.warn("TargetNotFound");
-      return;
-    }
-    const progress: { loaded: UintSize; total: UintSize } = target.getFrameLoadingProgress();
-
-    // - `action.frame` is 0-indexed.
-    // - `progress.loaded` returns values in `[0, progress.total]` (inclusive) but since we are
-    //   running the script, the first frame should be loaded and we can expected
-    //   `progress.loaded >= 1` (or maybe we may get `0` using `setTarget` shenanigans)
-    // - `progress.loaded >= progress.total` implies `isRequestedFrameLoaded` regardless of frame
-    //   index.
-
-    const isRequestedFrameLoaded: boolean = progress.loaded >= progress.total || progress.loaded > action.frame;
-
-    if (isRequestedFrameLoaded) {
-      this.skipCount = action.skipCount;
-    }
-  }
+  // private execWaitForFrame(action: WaitForFrame): void {
+  //   if (this.target === null) {
+  //     console.warn("NoCurrentTarget");
+  //     return;
+  //   }
+  //   const target: Target | undefined = this.host.getTarget(this.target);
+  //   if (target === undefined) {
+  //     console.warn("TargetNotFound");
+  //     return;
+  //   }
+  //   const progress: { loaded: UintSize; total: UintSize } = target.getFrameLoadingProgress();
+  //
+  //   // - `action.frame` is 0-indexed.
+  //   // - `progress.loaded` returns values in `[0, progress.total]` (inclusive) but since we are
+  //   //   running the script, the first frame should be loaded and we can expected
+  //   //   `progress.loaded >= 1` (or maybe we may get `0` using `setTarget` shenanigans)
+  //   // - `progress.loaded >= progress.total` implies `isRequestedFrameLoaded` regardless of frame
+  //   //   index.
+  //
+  //   const isRequestedFrameLoaded: boolean = progress.loaded >= progress.total || progress.loaded > action.frame;
+  //
+  //   if (isRequestedFrameLoaded) {
+  //     this.skipCount = action.skipCount;
+  //   }
+  // }
 
   private toUintSize(avmValue: AvmValue): number {
     if (avmValue.type === AvmValueType.Number && avmValue.value >= 0 && Math.floor(avmValue.value) === avmValue.value) {
@@ -1131,5 +992,39 @@ export class ExecutionContext implements ActionContext {
       // 22. Return false.
       return false;
     }
+  }
+
+  private call(callable: Callable, thisArg: AvmObject | AvmUndefined, args: ReadonlyArray<AvmValue>): AvmCallResult {
+    if (callable.type === CallableType.Host) {
+      return callable.handler({type: CallType.Apply, thisArg, args});
+    }
+    // assert: callable.type === CallableType.Avm
+    const activation: FunctionActivation = new FunctionActivation(callable);
+    const scope: StaticScope = {
+      type: ScopeType.Static,
+      variables: new Map(),
+      parent: callable.parentScope,
+    };
+
+    const stack: AvmStack = new AvmStack();
+    const registers: RegisterTable = new RegisterTable(4);
+    // TODO: Check how the target changes across function calls
+    const target: TargetId | null = callable.script.target;
+
+    const ctx: ExecutionContext = new ExecutionContext(
+      this.vm,
+      this.host,
+      this.budget,
+      activation,
+      scope,
+      stack,
+      registers,
+      target,
+    );
+
+    ctx.runCfg(callable.body);
+
+    // TODO: Handle return values
+    return AVM_UNDEFINED;
   }
 }

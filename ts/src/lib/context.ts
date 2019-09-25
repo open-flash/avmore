@@ -2,6 +2,11 @@ import { UintSize } from "semantic-types";
 import { AvmNumber, AvmString, AvmValue } from "./avm-value";
 import { AvmCallResult } from "./function";
 
+export interface RunBudget {
+  totalActions: UintSize;
+  readonly maxActions: UintSize;
+}
+
 export interface BaseContext {
   // Calls
 
@@ -18,6 +23,8 @@ export interface BaseContext {
   toHostString(value: AvmValue): string;
 
   toHostNumber(value: AvmValue): number;
+
+  toHostBoolean(value: AvmValue): boolean;
 
   // Objects
 
@@ -56,7 +63,14 @@ export interface StackContext {
   peek(): AvmValue;
 }
 
+// export interface MovieContext {
+//   setConstantPool(pool: ReadonlyArray<AvmString>): void;
+//
+//   getConstant(index: UintSize): AvmString | AvmUndefined;
+// }
+
 export interface ActionContext extends BaseContext, RegisterContext, ScopeContext, StackContext {
+  // readonly budget: RunBudget;
 }
 
 // export interface CallContext extends BaseContext {

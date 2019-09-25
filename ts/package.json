@@ -36,8 +36,8 @@
     "start": "node build/main/main/main.js"
   },
   "dependencies": {
-    "avm1-parser": "^0.7.1",
-    "avm1-tree": "^0.7.0",
+    "avm1-parser": "^0.8.0",
+    "avm1-tree": "^0.8.0",
     "incident": "^3.2.0",
     "semantic-types": "^0.1.1"
   },
@@ -46,7 +46,7 @@
     "@types/gulp": "^4.0.6",
     "@types/minimist": "^1.2.0",
     "@types/mocha": "^5.2.7",
-    "@types/node": "^10.12.18",
+    "@types/node": "^12.7.7",
     "chai": "^4.2.0",
     "gulp": "^4.0.2",
     "gulp-cli": "^2.2.0",

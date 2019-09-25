@@ -1,6 +1,49 @@
+import { ActionType } from "avm1-tree/action-type";
 import { StoreRegister } from "avm1-tree/actions";
+import { CfgAction } from "avm1-tree/cfg-action";
 import { AVM_NULL, AVM_UNDEFINED, AvmString, AvmValue } from "./avm-value";
 import { ActionContext } from "./context";
+
+export function action(ctx: ActionContext, action: CfgAction): void {
+  switch (action.action) {
+    case ActionType.Add2:
+      add2(ctx);
+      break;
+    case ActionType.CallFunction:
+      callFunction(ctx);
+      break;
+    case ActionType.DefineLocal:
+      defineLocal(ctx);
+      break;
+    case ActionType.Enumerate2:
+      enumerate2(ctx);
+      break;
+    case ActionType.GetMember:
+      getMember(ctx);
+      break;
+    case ActionType.GetVariable:
+      getVariable(ctx);
+      break;
+    case ActionType.NewObject:
+      newObject(ctx);
+      break;
+    case ActionType.Pop:
+      pop(ctx);
+      break;
+    case ActionType.PushDuplicate:
+      pushDuplicate(ctx);
+      break;
+    case ActionType.SetVariable:
+      setVariable(ctx);
+      break;
+    case ActionType.StoreRegister:
+      storeRegister(ctx, action);
+      break;
+    default:
+      console.error(action);
+      throw new Error(`UnknownAction: ${action.action} (${ActionType[action.action]})`);
+  }
+}
 
 export function add2(ctx: ActionContext): void {
   const right: AvmValue = ctx.pop();

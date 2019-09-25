@@ -1,7 +1,7 @@
-import { Cfg } from "avm1-tree/cfg";
 import { UintSize } from "semantic-types";
 import { AvmObject, AvmUndefined, AvmValue } from "./avm-value";
 import { AvmScope } from "./scope";
+import { Avm1Script, CfgTable } from "./script";
 
 /**
  * Represents an object that can be called from the AVM.
@@ -22,12 +22,14 @@ export enum CallableType {
 export interface AvmFunction {
   readonly type: CallableType.Avm;
   readonly parentScope: AvmScope;
+  // Script defining this function
+  readonly script: Avm1Script;
   // scriptId
   name?: string;
   // TODO: Support parameters with registers
   parameters: string[];
   registerCount: UintSize;
-  body: Cfg;
+  body: CfgTable;
 }
 
 export interface HostFunction {
