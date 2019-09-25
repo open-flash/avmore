@@ -2,18 +2,16 @@
 
 import { cfgFromBytes } from "avm1-parser";
 import { ActionType } from "avm1-tree/action-type";
-import { ConstantPool, GotoFrame, Push, SetTarget } from "avm1-tree/actions";
+import { GotoFrame, SetTarget } from "avm1-tree/actions";
 import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgDefineFunction } from "avm1-tree/cfg-actions/cfg-define-function";
 import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
 import { NullableCfgLabel } from "avm1-tree/cfg-label";
-import { ValueType as AstValueType } from "avm1-tree/value-type";
 import { UintSize } from "semantic-types";
 import * as actions from "./actions";
 import {
   AVM_FALSE,
-  AVM_NULL,
   AVM_ONE,
   AVM_TRUE,
   AVM_UNDEFINED,
@@ -546,6 +544,14 @@ export class ExecutionContext implements ActionContext {
     return this.stack.peek();
   }
 
+  public setConstantPool(pool: ReadonlyArray<AvmString>): void {
+    this.vm.constantPool.setConstantPool(pool);
+  }
+
+  public getConstant(index: UintSize): AvmString | AvmUndefined {
+    return this.vm.constantPool.getConstant(index);
+  }
+
   public getReg(regId: UintSize): AvmValue {
     return this.registers.get(regId);
   }
@@ -598,9 +604,6 @@ export class ExecutionContext implements ActionContext {
       case ActionType.CallMethod:
         this.execCallMethod();
         break;
-      case ActionType.ConstantPool:
-        this.execConstantPool(action);
-        break;
       case ActionType.DefineFunction:
         this.execDefineFunction(action);
         break;
@@ -627,9 +630,6 @@ export class ExecutionContext implements ActionContext {
         break;
       case ActionType.Play:
         this.execPlay();
-        break;
-      case ActionType.Push:
-        this.execPush(action);
         break;
       case ActionType.SetTarget:
         this.execSetTarget(action);
@@ -664,14 +664,6 @@ export class ExecutionContext implements ActionContext {
     }
     const result: AvmValue = this.apply(method, obj, args);
     this.stack.push(result);
-  }
-
-  private execConstantPool(action: ConstantPool): void {
-    const pool: AvmString[] = [];
-    for (const value of action.constantPool) {
-      pool.push({type: AvmValueType.String as AvmValueType.String, value});
-    }
-    this.vm.constantPool.set(pool);
   }
 
   private execDefineFunction(action: CfgDefineFunction): void {
@@ -775,42 +767,6 @@ export class ExecutionContext implements ActionContext {
       target.play();
     } else {
       console.warn("TargetNotFound");
-    }
-  }
-
-  private execPush(action: Push): void {
-    for (const value of action.values) {
-      switch (value.type) {
-        case AstValueType.Boolean:
-          this.stack.push({type: AvmValueType.Boolean as AvmValueType.Boolean, value: value.value});
-          break;
-        case AstValueType.Constant:
-          this.stack.push(this.vm.constantPool.get(value.value));
-          break;
-        case AstValueType.Float32:
-          this.stack.push({type: AvmValueType.Number as AvmValueType.Number, value: value.value});
-          break;
-        case AstValueType.Float64:
-          this.stack.push({type: AvmValueType.Number as AvmValueType.Number, value: value.value});
-          break;
-        case AstValueType.Null:
-          this.stack.push(AVM_NULL);
-          break;
-        case AstValueType.Register:
-          this.stack.push(this.registers.get(value.value));
-          break;
-        case AstValueType.Sint32:
-          this.stack.push({type: AvmValueType.Number as AvmValueType.Number, value: value.value});
-          break;
-        case AstValueType.String:
-          this.stack.push(AvmValue.fromHostString(value.value));
-          break;
-        case AstValueType.Undefined:
-          this.stack.push(AVM_UNDEFINED);
-          break;
-        default:
-          throw new Error(`UnknownValueType ${value}`);
-      }
     }
   }
 

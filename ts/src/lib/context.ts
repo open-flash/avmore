@@ -1,5 +1,5 @@
 import { UintSize } from "semantic-types";
-import { AvmBoolean, AvmNumber, AvmString, AvmValue } from "./avm-value";
+import { AvmBoolean, AvmNumber, AvmString, AvmUndefined, AvmValue } from "./avm-value";
 import { AvmCallResult } from "./function";
 
 export interface RunBudget {
@@ -63,13 +63,13 @@ export interface StackContext {
   peek(): AvmValue;
 }
 
-// export interface MovieContext {
-//   setConstantPool(pool: ReadonlyArray<AvmString>): void;
-//
-//   getConstant(index: UintSize): AvmString | AvmUndefined;
-// }
+export interface ConstantPoolContext {
+  setConstantPool(pool: ReadonlyArray<AvmString>): void;
 
-export interface ActionContext extends BaseContext, RegisterContext, ScopeContext, StackContext {
+  getConstant(index: UintSize): AvmString | AvmUndefined;
+}
+
+export interface ActionContext extends BaseContext, RegisterContext, ScopeContext, StackContext, ConstantPoolContext {
   // readonly budget: RunBudget;
 }
 

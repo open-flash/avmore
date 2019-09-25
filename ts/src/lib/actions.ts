@@ -1,6 +1,7 @@
 import { ActionType } from "avm1-tree/action-type";
-import { StoreRegister } from "avm1-tree/actions";
+import { ConstantPool, Push, StoreRegister } from "avm1-tree/actions";
 import { CfgAction } from "avm1-tree/cfg-action";
+import { ValueType as AstValueType } from "avm1-tree/value-type";
 import { AVM_NULL, AVM_UNDEFINED, AvmString, AvmValue } from "./avm-value";
 import { ActionContext } from "./context";
 
@@ -11,6 +12,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
       break;
     case ActionType.CallFunction:
       callFunction(ctx);
+      break;
+    case ActionType.ConstantPool:
+      constantPool(ctx, action);
       break;
     case ActionType.DefineLocal:
       defineLocal(ctx);
@@ -29,6 +33,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
       break;
     case ActionType.Pop:
       pop(ctx);
+      break;
+    case ActionType.Push:
+      push(ctx, action);
       break;
     case ActionType.PushDuplicate:
       pushDuplicate(ctx);
@@ -65,6 +72,14 @@ export function callFunction(ctx: ActionContext): void {
   ctx.push(result);
 }
 
+export function constantPool(ctx: ActionContext, action: ConstantPool): void {
+  const pool: AvmString[] = [];
+  for (const value of action.constantPool) {
+    pool.push(AvmValue.fromHostString(value));
+  }
+  ctx.setConstantPool(pool);
+}
+
 export function defineLocal(ctx: ActionContext): void {
   const value: AvmValue = ctx.pop();
   const name: string = ctx.toHostString(ctx.pop());
@@ -94,6 +109,42 @@ export function enumerate2(ctx: ActionContext): void {
 
 export function pop(ctx: ActionContext): void {
   ctx.pop();
+}
+
+export function push(ctx: ActionContext, action: Push): void {
+  for (const value of action.values) {
+    switch (value.type) {
+      case AstValueType.Boolean:
+        ctx.push(AvmValue.fromHostBoolean(value.value));
+        break;
+      case AstValueType.Constant:
+        ctx.push(ctx.getConstant(value.value));
+        break;
+      case AstValueType.Float32:
+        ctx.push(AvmValue.fromHostNumber(value.value));
+        break;
+      case AstValueType.Float64:
+        ctx.push(AvmValue.fromHostNumber(value.value));
+        break;
+      case AstValueType.Null:
+        ctx.push(AVM_NULL);
+        break;
+      case AstValueType.Register:
+        ctx.push(ctx.getReg(value.value));
+        break;
+      case AstValueType.Sint32:
+        ctx.push(AvmValue.fromHostNumber(value.value));
+        break;
+      case AstValueType.String:
+        ctx.push(AvmValue.fromHostString(value.value));
+        break;
+      case AstValueType.Undefined:
+        ctx.push(AVM_UNDEFINED);
+        break;
+      default:
+        throw new Error(`UnexpectedPushValueType: ${value}`);
+    }
+  }
 }
 
 export function newObject(ctx: ActionContext): void {
