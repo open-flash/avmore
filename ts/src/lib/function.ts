@@ -240,6 +240,18 @@ class HostCallContextImpl implements BaseHostCallContext {
   unsignedRightShift(left: AvmValue, right: AvmValue): AvmNumber {
     return this.ctx.unsignedRightShift(left, right);
   }
+
+  bitwiseAnd(left: AvmValue, right: AvmValue): AvmNumber {
+    return this.ctx.bitwiseAnd(left, right);
+  }
+
+  bitwiseXor(left: AvmValue, right: AvmValue): AvmNumber {
+    return this.ctx.bitwiseXor(left, right);
+  }
+
+  bitwiseOr(left: AvmValue, right: AvmValue): AvmNumber {
+    return this.ctx.bitwiseOr(left, right);
+  }
 }
 
 export enum CallType {

@@ -860,6 +860,63 @@ export class ExecutionContext implements ActionContext {
     return AvmValue.fromHostNumber(leftSint32 >>> rightUint32);
   }
 
+  // Implements the bitwise and operation as defined in ECMA-262-3, section 11.10
+  public bitwiseAnd(left: AvmValue, right: AvmValue): AvmNumber {
+    // 1. Evaluate A.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate B.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToInt32(Result(2)).
+    const leftSint32: Sint32 = this.toHostSint32(left);
+    // 5. Call ToInt32(Result(4)).
+    const rightSint32: Sint32 = this.toHostSint32(right);
+    // 7. Apply the bitwise operator @ to Result(5) and Result(6). The result is a signed 32 bit
+    //    integer.
+    // 8. Return Result(7).
+    return AvmValue.fromHostNumber(leftSint32 & rightSint32);
+  }
+
+  // Implements the bitwise xor operation as defined in ECMA-262-3, section 11.10
+  public bitwiseXor(left: AvmValue, right: AvmValue): AvmNumber {
+    // 1. Evaluate A.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate B.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToInt32(Result(2)).
+    const leftSint32: Sint32 = this.toHostSint32(left);
+    // 5. Call ToInt32(Result(4)).
+    const rightSint32: Sint32 = this.toHostSint32(right);
+    // 7. Apply the bitwise operator @ to Result(5) and Result(6). The result is a signed 32 bit
+    //    integer.
+    // 8. Return Result(7).
+    return AvmValue.fromHostNumber(leftSint32 ^ rightSint32);
+  }
+
+  // Implements the bitwise or operation as defined in ECMA-262-3, section 11.10
+  public bitwiseOr(left: AvmValue, right: AvmValue): AvmNumber {
+    // 1. Evaluate A.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate B.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToInt32(Result(2)).
+    const leftSint32: Sint32 = this.toHostSint32(left);
+    // 5. Call ToInt32(Result(4)).
+    const rightSint32: Sint32 = this.toHostSint32(right);
+    // 7. Apply the bitwise operator @ to Result(5) and Result(6). The result is a signed 32 bit
+    //    integer.
+    // 8. Return Result(7).
+    return AvmValue.fromHostNumber(leftSint32 | rightSint32);
+  }
+
   public exec(action: CfgAction): void {
     switch (action.action) {
       case ActionType.CallMethod:

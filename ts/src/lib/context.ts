@@ -64,6 +64,12 @@ export interface BaseContext {
   signedRightShift(left: AvmValue, right: AvmValue): AvmNumber;
 
   unsignedRightShift(left: AvmValue, right: AvmValue): AvmNumber;
+
+  bitwiseAnd(left: AvmValue, right: AvmValue): AvmNumber;
+
+  bitwiseXor(left: AvmValue, right: AvmValue): AvmNumber;
+
+  bitwiseOr(left: AvmValue, right: AvmValue): AvmNumber;
 }
 
 export interface ScopeContext {
