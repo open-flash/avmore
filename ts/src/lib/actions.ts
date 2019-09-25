@@ -72,6 +72,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.StoreRegister:
       storeRegister(ctx, action);
       break;
+    case ActionType.Subtract:
+      subtract(ctx);
+      break;
     default:
       console.error(action);
       throw new Error(`UnknownAction: ${action.action} (${ActionType[action.action]})`);
@@ -312,4 +315,10 @@ export function setVariable(ctx: ActionContext): void {
 export function storeRegister(ctx: ActionContext, action: StoreRegister): void {
   const value: AvmValue = ctx.peek();
   ctx.setReg(action.register, value);
+}
+
+export function subtract(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.subtract(left, right));
 }

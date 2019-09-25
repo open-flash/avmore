@@ -719,6 +719,25 @@ export class ExecutionContext implements ActionContext {
     }
   }
 
+  // Implements the subtraction operation as defined in ECMA-262-3, section 11.6.2
+  // ("The Subtraction Operator ( - )")
+  public subtract(left: AvmValue, right: AvmValue): AvmNumber {
+    // 1. Evaluate AdditiveExpression.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate MultiplicativeExpression.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToNumber(Result(2)).
+    const leftNum: number = this.toHostNumber(left);
+    // 6. Call ToNumber(Result(4)).
+    const rightNum: number = this.toHostNumber(right);
+    // 7. Apply the subtraction operation to Result(5) and Result(6). See the note below (11.6.3).
+    // 8. Return Result(7).
+    return AvmValue.fromHostNumber(leftNum - rightNum);
+  }
+
   // Implements the left shift operation as defined in ECMA-262-3, section 11.7.1
   // ("The Left Shift Operator ( << )")
   public leftShift(left: AvmValue, right: AvmValue): AvmNumber {

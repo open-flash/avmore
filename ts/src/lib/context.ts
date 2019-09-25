@@ -51,6 +51,8 @@ export interface BaseContext {
 
   add(left: AvmValue, right: AvmValue): AvmString | AvmNumber;
 
+  subtract(left: AvmValue, right: AvmValue): AvmNumber;
+
   leftShift(left: AvmValue, right: AvmValue): AvmNumber;
 
   signedRightShift(left: AvmValue, right: AvmValue): AvmNumber;

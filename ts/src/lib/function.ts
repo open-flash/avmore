@@ -213,6 +213,10 @@ class HostCallContextImpl implements BaseHostCallContext {
     return this.ctx.add(left, right);
   }
 
+  subtract(left: AvmValue, right: AvmValue): AvmNumber {
+    return this.ctx.subtract(left, right);
+  }
+
   leftShift(left: AvmValue, right: AvmValue): AvmNumber {
     return this.ctx.leftShift(left, right);
   }
