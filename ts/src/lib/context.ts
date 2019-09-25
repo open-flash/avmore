@@ -49,6 +49,12 @@ export interface BaseContext {
 
   // Operators
 
+  multiply(left: AvmValue, right: AvmValue): AvmNumber;
+
+  divide(left: AvmValue, right: AvmValue): AvmNumber;
+
+  remainder(left: AvmValue, right: AvmValue): AvmNumber;
+
   add(left: AvmValue, right: AvmValue): AvmString | AvmNumber;
 
   subtract(left: AvmValue, right: AvmValue): AvmNumber;

@@ -39,6 +39,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.DefineLocal:
       defineLocal(ctx);
       break;
+    case ActionType.Divide:
+      divide(ctx);
+      break;
     case ActionType.Enumerate2:
       enumerate2(ctx);
       break;
@@ -50,6 +53,12 @@ export function action(ctx: ActionContext, action: CfgAction): void {
       break;
     case ActionType.GetVariable:
       getVariable(ctx);
+      break;
+    case ActionType.Modulo:
+      modulo(ctx);
+      break;
+    case ActionType.Multiply:
+      multiply(ctx);
       break;
     case ActionType.NewObject:
       newObject(ctx);
@@ -203,6 +212,12 @@ export function defineLocal(ctx: ActionContext): void {
   ctx.setLocal(name, value);
 }
 
+export function divide(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.divide(left, right));
+}
+
 export function initArray(ctx: ActionContext): void {
   const len: number = ctx.toHostNumber(ctx.pop());
 
@@ -233,6 +248,18 @@ export function enumerate2(ctx: ActionContext): void {
   for (const key of keys) {
     ctx.push(key);
   }
+}
+
+export function modulo(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.remainder(left, right));
+}
+
+export function multiply(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.multiply(left, right));
 }
 
 export function pop(ctx: ActionContext): void {

@@ -680,6 +680,66 @@ export class ExecutionContext implements ActionContext {
     this.registers.set(regId, value);
   }
 
+  // Implements the multiply operation as defined in ECMA-262-3, section 11.5.1
+  // ("Applying the * Operator")
+  public multiply(left: AvmValue, right: AvmValue): AvmNumber {
+    // 1. Evaluate MultiplicativeExpression.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate UnaryExpression.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToNumber(Result(2)).
+    const leftNum: number = this.toHostNumber(left);
+    // 6. Call ToNumber(Result(4)).
+    const rightNum: number = this.toHostNumber(right);
+    // 7. Apply the specified operation (*, /, or %) to Result(5) and Result(6). See the notes
+    //    below (11.5.1, 11.5.2, 11.5.3).
+    // 8. Return Result(7).
+    return AvmValue.fromHostNumber(leftNum * rightNum);
+  }
+
+  // Implements the divide operation as defined in ECMA-262-3, section 11.5.2
+  // ("Applying the / Operator")
+  public divide(left: AvmValue, right: AvmValue): AvmNumber {
+    // 1. Evaluate MultiplicativeExpression.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate UnaryExpression.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToNumber(Result(2)).
+    const leftNum: number = this.toHostNumber(left);
+    // 6. Call ToNumber(Result(4)).
+    const rightNum: number = this.toHostNumber(right);
+    // 7. Apply the specified operation (*, /, or %) to Result(5) and Result(6). See the notes
+    //    below (11.5.1, 11.5.2, 11.5.3).
+    // 8. Return Result(7).
+    return AvmValue.fromHostNumber(leftNum / rightNum);
+  }
+
+  // Implements the remainder operation as defined in ECMA-262-3, section 11.5.3
+  // ("Applying the % Operator")
+  public remainder(left: AvmValue, right: AvmValue): AvmNumber {
+    // 1. Evaluate MultiplicativeExpression.
+    // 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // 3. Evaluate UnaryExpression.
+    // 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+
+    // 5. Call ToNumber(Result(2)).
+    const leftNum: number = this.toHostNumber(left);
+    // 6. Call ToNumber(Result(4)).
+    const rightNum: number = this.toHostNumber(right);
+    // 7. Apply the specified operation (*, /, or %) to Result(5) and Result(6). See the notes
+    //    below (11.5.1, 11.5.2, 11.5.3).
+    // 8. Return Result(7).
+    return AvmValue.fromHostNumber(leftNum % rightNum);
+  }
+
   // Implements the add operation as defined in ECMA-262-3, section 11.6.1
   // ("The Addition operator ( + )")
   public add(left: AvmValue, right: AvmValue): AvmString | AvmNumber {
