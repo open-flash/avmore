@@ -83,7 +83,7 @@ export function constantPool(ctx: ActionContext, action: ConstantPool): void {
 export function defineLocal(ctx: ActionContext): void {
   const value: AvmValue = ctx.pop();
   const name: string = ctx.toHostString(ctx.pop());
-  ctx.localVar(name, value);
+  ctx.setLocal(name, value);
 }
 
 export function getMember(ctx: ActionContext): void {

@@ -1,6 +1,6 @@
 import { UintSize } from "semantic-types";
 import { AvmObject, AvmUndefined, AvmValue } from "./avm-value";
-import { AvmScope } from "./scope";
+import { Scope } from "./scope";
 import { Avm1Script, CfgTable } from "./script";
 
 /**
@@ -21,7 +21,7 @@ export enum CallableType {
 
 export interface AvmFunction {
   readonly type: CallableType.Avm;
-  readonly parentScope: AvmScope;
+  readonly parentScope: Scope;
   // Script defining this function
   readonly script: Avm1Script;
   // scriptId

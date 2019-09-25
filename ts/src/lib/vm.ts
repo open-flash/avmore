@@ -36,7 +36,7 @@ import { ReferenceToUndeclaredVariableWarning, TargetHasNoPropertyWarning } from
 import { AvmCallResult, AvmFunction, Callable, CallableType, CallType } from "./function";
 import { Host, Target } from "./host";
 import { Realm } from "./realm";
-import { AvmScope, ScopeType, StaticScope } from "./scope";
+import { DynamicScope, Scope, StaticScope } from "./scope";
 import { Avm1Script, Avm1ScriptId, CfgTable } from "./script";
 import { AvmStack } from "./stack";
 
@@ -194,7 +194,7 @@ export class ExecutionContext implements ActionContext {
 
   // Activation context
   private readonly activation: Activation;
-  private readonly scope: AvmScope;
+  private readonly scope: Scope;
   private readonly stack: AvmStack;
   private readonly registers: RegisterTable;
   private target: TargetId | null;
@@ -204,7 +204,7 @@ export class ExecutionContext implements ActionContext {
     host: Host,
     budget: RunBudget,
     activation: Activation,
-    scope: AvmScope,
+    scope: Scope,
     stack: AvmStack,
     registers: RegisterTable,
     target: TargetId | null,
@@ -221,9 +221,9 @@ export class ExecutionContext implements ActionContext {
 
   public static runScript(vm: Vm, host: Host, budget: RunBudget, script: Avm1Script): void {
     const activation: ScriptActivation = new ScriptActivation(script);
-    const scope: AvmScope = script.rootScope !== null
-      ? {type: ScopeType.Dynamic, container: script.rootScope}
-      : {type: ScopeType.Static, variables: new Map()};
+    const scope: Scope = script.rootScope !== null
+      ? new DynamicScope(script.rootScope, undefined)
+      : new StaticScope(undefined);
     const stack: AvmStack = new AvmStack();
     const registers: RegisterTable = new RegisterTable(4);
     const target: TargetId | null = script.target; // Initialize with default target
@@ -483,53 +483,21 @@ export class ExecutionContext implements ActionContext {
   }
 
   public getVar(varName: string): AvmValue {
-    let cur: AvmScope | undefined = this.scope;
-    while (cur !== undefined) {
-      let value: AvmValue | undefined;
-      if (cur.type === ScopeType.Dynamic) {
-        value = this.tryGetStringMember(cur.container, varName);
-      } else { // ScopeType.Static
-        value = cur.variables.get(varName);
-      }
-      if (value !== undefined) {
-        return value;
-      }
-      cur = cur.parent;
+    const value: AvmValue | undefined = this.scope.getVar(this, varName);
+    if (value !== undefined) {
+      return value;
+    } else {
+      this.host.warn(new ReferenceToUndeclaredVariableWarning(varName));
+      return AVM_UNDEFINED;
     }
-    this.host.warn(new ReferenceToUndeclaredVariableWarning(varName));
-    return AVM_UNDEFINED;
   }
 
   public setVar(varName: string, value: AvmValue): void {
-    let cur: AvmScope | undefined = this.scope;
-    while (cur !== undefined) {
-      let hasVar: boolean;
-      if (cur.type === ScopeType.Dynamic) {
-        hasVar = this.tryGetStringMember(cur.container, varName) !== undefined;
-      } else { // ScopeType.Static
-        hasVar = cur.variables.has(varName);
-      }
-      if (hasVar) {
-        break;
-      }
-      cur = cur.parent;
-    }
-    if (cur === undefined) {
-      cur = this.scope;
-    }
-    if (cur.type === ScopeType.Dynamic) {
-      this.setStringMember(cur.container, varName, value);
-    } else { // ScopeType.Static
-      cur.variables.set(varName, value);
-    }
+    this.scope.setVar(this, varName, value);
   }
 
-  public localVar(varName: string, value: AvmValue): void {
-    if (this.scope.type === ScopeType.Dynamic) {
-      this.setStringMember(this.scope.container, varName, value);
-    } else { // ScopeType.Static
-      this.scope.variables.set(varName, value);
-    }
+  public setLocal(varName: string, value: AvmValue): void {
+    this.scope.setLocal(this, varName, value);
   }
 
   public push(value: AvmValue): void {
@@ -687,7 +655,7 @@ export class ExecutionContext implements ActionContext {
     };
 
     if (fn.name !== undefined && fn.name.length > 0) {
-      this.localVar(fn.name, fnObj);
+      this.setLocal(fn.name, fnObj);
     }
 
     this.push(fnObj);
@@ -968,11 +936,7 @@ export class ExecutionContext implements ActionContext {
     }
     // assert: callable.type === CallableType.Avm
     const activation: FunctionActivation = new FunctionActivation(callable);
-    const scope: StaticScope = {
-      type: ScopeType.Static,
-      variables: new Map(),
-      parent: callable.parentScope,
-    };
+    const scope: StaticScope = new StaticScope(callable.parentScope);
 
     const stack: AvmStack = new AvmStack();
     const registers: RegisterTable = new RegisterTable(4);

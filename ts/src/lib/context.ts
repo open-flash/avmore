@@ -28,11 +28,15 @@ export interface BaseContext {
 
   // Objects
 
+  getOwnKeys(obj: AvmValue): AvmString[];
+
   getMember(obj: AvmValue, name: AvmValue): AvmValue;
 
-  setMember(obj: AvmValue, name: AvmValue, value: AvmValue): void;
+  getStringMember(obj: AvmValue, name: string): AvmValue;
 
-  getOwnKeys(obj: AvmValue): AvmString[];
+  tryGetStringMember(obj: AvmValue, name: string): AvmValue | undefined;
+
+  setMember(obj: AvmValue, name: AvmValue, value: AvmValue): void;
 
   setStringMember(obj: AvmValue, name: string, value: AvmValue): void;
 
@@ -46,7 +50,7 @@ export interface ScopeContext {
 
   setVar(varName: string, value: AvmValue): void;
 
-  localVar(varName: string, value: AvmValue): void;
+  setLocal(varName: string, value: AvmValue): void;
 }
 
 export interface RegisterContext {
