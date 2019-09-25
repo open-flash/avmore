@@ -1,6 +1,6 @@
 import { UintSize } from "semantic-types";
 import { AvmBoolean, AvmNumber, AvmSimpleObject, AvmString, AvmUndefined, AvmValue } from "./avm-value";
-import { AvmCallResult, AvmFunctionParameter } from "./function";
+import { AvmCallResult, AvmFunctionParameter, ParameterState } from "./function";
 import { CfgTable } from "./script";
 
 export interface RunBudget {
@@ -78,6 +78,12 @@ export interface ActionContext extends BaseContext, RegisterContext, ScopeContex
   createAvmFunction(
     name: string | undefined,
     registerCount: UintSize,
+    thisState: ParameterState,
+    argumentsState: ParameterState,
+    superState: ParameterState,
+    preloadRoot: boolean,
+    preloadParent: boolean,
+    preloadGlobal: boolean,
     parameters: AvmFunctionParameter[],
     body: CfgTable,
   ): AvmSimpleObject;

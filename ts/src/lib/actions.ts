@@ -2,11 +2,12 @@ import { ActionType } from "avm1-tree/action-type";
 import { ConstantPool, Push, StoreRegister } from "avm1-tree/actions";
 import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgDefineFunction } from "avm1-tree/cfg-actions/cfg-define-function";
+import { CfgDefineFunction2 } from "avm1-tree/cfg-actions/cfg-define-function2";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
 import { UintSize } from "semantic-types";
 import { AVM_NULL, AVM_UNDEFINED, AvmSimpleObject, AvmString, AvmValue } from "./avm-value";
 import { ActionContext } from "./context";
-import { AvmFunctionParameter } from "./function";
+import { AvmFunctionParameter, ParameterState } from "./function";
 import { CfgTable } from "./script";
 
 export function action(ctx: ActionContext, action: CfgAction): void {
@@ -22,6 +23,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
       break;
     case ActionType.DefineFunction:
       defineFunction(ctx, action);
+      break;
+    case ActionType.DefineFunction2:
+      defineFunction2(ctx, action);
       break;
     case ActionType.DefineLocal:
       defineLocal(ctx);
@@ -98,12 +102,63 @@ export function defineFunction(ctx: ActionContext, action: CfgDefineFunction): v
   }
   const body: CfgTable = new CfgTable(action.body);
 
-  const fn: AvmSimpleObject = ctx.createAvmFunction(name, registerCount, parameters, body);
+  const fn: AvmSimpleObject = ctx.createAvmFunction(
+    name,
+    registerCount,
+    ParameterState.Default,
+    ParameterState.Default,
+    ParameterState.Default,
+    false,
+    false,
+    false,
+    parameters,
+    body,
+  );
 
   if (name !== undefined) {
     ctx.setLocal(name, fn);
   }
   ctx.push(fn);
+}
+
+export function defineFunction2(ctx: ActionContext, action: CfgDefineFunction2): void {
+  const name: string | undefined = action.name !== undefined && action.name.length > 0
+    ? action.name
+    : undefined;
+  const registerCount: UintSize = action.registerCount;
+  const parameters: AvmFunctionParameter[] = [];
+  for (const param of action.parameters) {
+    parameters.push({name: param.name, register: param.register > 0 ? param.register : undefined});
+  }
+  const body: CfgTable = new CfgTable(action.body);
+
+  const fn: AvmSimpleObject = ctx.createAvmFunction(
+    name,
+    registerCount,
+    getParamState(action.preloadThis, action.suppressThis),
+    getParamState(action.preloadArguments, action.preloadArguments),
+    getParamState(action.preloadSuper, action.preloadSuper),
+    action.preloadRoot,
+    action.preloadParent,
+    action.preloadGlobal,
+    parameters,
+    body,
+  );
+
+  if (name !== undefined) {
+    ctx.setLocal(name, fn);
+  }
+  ctx.push(fn);
+
+  function getParamState(preload: boolean, suppress: boolean) {
+    if (preload) {
+      return ParameterState.Preload;
+    } else if (suppress) {
+      return ParameterState.Suppress;
+    } else {
+      return ParameterState.Default;
+    }
+  }
 }
 
 export function defineLocal(ctx: ActionContext): void {

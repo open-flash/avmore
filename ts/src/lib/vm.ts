@@ -32,7 +32,15 @@ import {
 import { AvmConstantPool } from "./constant-pool";
 import { ActionContext, RunBudget } from "./context";
 import { ReferenceToUndeclaredVariableWarning, TargetHasNoPropertyWarning } from "./error";
-import { AvmCallResult, AvmFunction, AvmFunctionParameter, Callable, CallableType, CallType } from "./function";
+import {
+  AvmCallResult,
+  AvmFunction,
+  AvmFunctionParameter,
+  Callable,
+  CallableType,
+  CallType,
+  ParameterState,
+} from "./function";
 import { Host, Target } from "./host";
 import { Realm } from "./realm";
 import { DynamicScope, Scope, StaticScope } from "./scope";
@@ -40,12 +48,6 @@ import { Avm1Script, Avm1ScriptId, CfgTable } from "./script";
 import { AvmStack } from "./stack";
 
 const SWF_VERSION: number = 8;
-
-// export class Vm {
-//   execAvm1(avm1: Uint8Array) {
-//     const parser =
-//   };
-// }
 
 export type TargetId = number;
 export type MovieId = number;
@@ -333,7 +335,13 @@ export class ExecutionContext implements ActionContext {
   public createAvmFunction(
     name: string | undefined,
     registerCount: UintSize,
-    parameters: AvmFunctionParameter[],
+    thisState: ParameterState,
+    argumentsState: ParameterState,
+    superState: ParameterState,
+    preloadRoot: boolean,
+    preloadParent: boolean,
+    preloadGlobal: boolean,
+    parameters: ReadonlyArray<AvmFunctionParameter>,
     body: CfgTable,
   ): AvmSimpleObject {
     const fn: AvmFunction = {
@@ -342,6 +350,12 @@ export class ExecutionContext implements ActionContext {
       script: this.activation.getScript(),
       name,
       registerCount,
+      thisState,
+      argumentsState,
+      superState,
+      preloadRoot,
+      preloadParent,
+      preloadGlobal,
       parameters,
       body,
     };

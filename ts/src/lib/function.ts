@@ -25,6 +25,12 @@ export interface AvmFunctionParameter {
   readonly register?: UintSize;
 }
 
+export enum ParameterState {
+  Default,
+  Suppress,
+  Preload,
+}
+
 export interface AvmFunction {
   readonly type: CallableType.Avm;
   readonly parentScope: Scope;
@@ -32,9 +38,14 @@ export interface AvmFunction {
   readonly script: Avm1Script;
   // scriptId
   name?: string;
-  // TODO: Support parameters with registers
-  parameters: ReadonlyArray<AvmFunctionParameter>;
   registerCount: UintSize;
+  thisState: ParameterState;
+  argumentsState: ParameterState;
+  superState: ParameterState;
+  preloadRoot: boolean;
+  preloadParent: boolean;
+  preloadGlobal: boolean;
+  parameters: ReadonlyArray<AvmFunctionParameter>;
   body: CfgTable;
 }
 
