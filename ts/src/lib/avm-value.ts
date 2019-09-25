@@ -98,23 +98,6 @@ export const AvmValue = {
     return {type: AvmValueType.String, value};
   },
   // Implementation of the ToNumber algorithm from ECMA 262-3, section 9.3
-  toAvmBoolean(avmValue: AvmValue, _swfVersion: number): AvmBoolean {
-    switch (avmValue.type) {
-      case AvmValueType.Undefined:
-        return AVM_FALSE;
-      case AvmValueType.Null:
-        return AVM_FALSE;
-      case AvmValueType.Boolean:
-        return avmValue;
-      case AvmValueType.Number:
-        return AvmValue.fromHostBoolean(isNaN(avmValue.value) || avmValue.value === 0);
-      case AvmValueType.String:
-        return AvmValue.fromHostBoolean(avmValue.value.length > 0);
-      default:
-        return AVM_TRUE;
-    }
-  },
-  // Implementation of the ToNumber algorithm from ECMA 262-3, section 9.3
   toAvmNumber(avmValue: AvmValue, _swfVersion: number): AvmNumber {
     switch (avmValue.type) {
       case AvmValueType.Undefined:

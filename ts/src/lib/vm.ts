@@ -390,8 +390,24 @@ export class ExecutionContext implements ActionContext {
     return keys;
   }
 
-  public toAvmBoolean(value: AvmValue): AvmValue {
-    return AvmValue.toAvmBoolean(value, SWF_VERSION);
+  // Implementation of the ToBoolean algorithm from ECMA 262-3, section 9.2
+  public toAvmBoolean(value: AvmValue): AvmBoolean {
+    switch (value.type) {
+      case AvmValueType.Boolean:
+        return value;
+      case AvmValueType.Null:
+        return AVM_FALSE;
+      case AvmValueType.Number:
+        return AvmValue.fromHostBoolean(isNaN(value.value) || value.value === 0);
+      case AvmValueType.Object:
+        return AVM_TRUE;
+      case AvmValueType.String:
+        return AvmValue.fromHostBoolean(value.value.length > 0);
+      case AvmValueType.Undefined:
+        return AVM_FALSE;
+      default:
+        throw new Error(`UnexpectedAvmValueType: ${value}`);
+    }
   }
 
   // Implementation of the ToString algorithm from ECMA 262-3, section 9.8
@@ -465,10 +481,7 @@ export class ExecutionContext implements ActionContext {
   }
 
   public toHostBoolean(value: AvmValue): boolean {
-    if (value.type === AvmValueType.Boolean) {
-      return value.value;
-    }
-    throw new Error("NotImplemented: toHostBoolean on non-boolean");
+    return this.toAvmBoolean(value).value;
   }
 
   public getVar(varName: string): AvmValue {
@@ -744,12 +757,11 @@ export class ExecutionContext implements ActionContext {
   }
 
   private execNot(): void {
-    const arg: AvmValue = this.stack.pop();
-    const argBoolean: AvmBoolean = AvmValue.toAvmBoolean(arg, SWF_VERSION);
+    const arg: AvmBoolean = this.toAvmBoolean(this.stack.pop());
     if (SWF_VERSION >= 5) {
-      this.stack.push(argBoolean.value ? AVM_FALSE : AVM_TRUE);
+      this.stack.push(arg.value ? AVM_FALSE : AVM_TRUE);
     } else {
-      this.stack.push(argBoolean.value ? AVM_ZERO : AVM_ONE);
+      this.stack.push(arg.value ? AVM_ZERO : AVM_ONE);
     }
   }
 

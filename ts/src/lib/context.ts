@@ -1,5 +1,5 @@
 import { UintSize } from "semantic-types";
-import { AvmNumber, AvmString, AvmValue } from "./avm-value";
+import { AvmBoolean, AvmNumber, AvmString, AvmValue } from "./avm-value";
 import { AvmCallResult } from "./function";
 
 export interface RunBudget {
@@ -16,7 +16,7 @@ export interface BaseContext {
 
   // Conversions
 
-  toAvmBoolean(value: AvmValue): AvmValue;
+  toAvmBoolean(value: AvmValue): AvmBoolean;
 
   toAvmString(value: AvmValue): AvmString;
 
