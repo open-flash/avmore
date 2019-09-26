@@ -113,7 +113,7 @@ export class Vm {
       type: AvmValueType.Object,
       external: false,
       class: "Object",
-      prototype: proto !== undefined ? proto : this.realm.objectProto,
+      prototype: proto !== undefined ? proto : this.realm.objectPrototype,
       ownProperties: new Map(),
     };
   }
@@ -443,7 +443,7 @@ export class ExecutionContext implements ActionContext {
         type: AvmValueType.Object,
         external: false,
         class: "Object",
-        prototype: this.vm.realm.objectProto,
+        prototype: this.getRealm().objectPrototype,
         ownProperties: new Map(),
         callable: undefined,
       };
@@ -485,7 +485,7 @@ export class ExecutionContext implements ActionContext {
       type: AvmValueType.Object,
       external: false,
       class: "Function",
-      prototype: this.vm.realm.funcProto,
+      prototype: this.getRealm().functionPrototype,
       ownProperties: new Map(),
       callable: fn,
     };
