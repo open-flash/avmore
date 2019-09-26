@@ -117,21 +117,6 @@ export class Vm {
       ownProperties: new Map(),
     };
   }
-
-  public setMember(target: AvmValue, key: string, value: AvmValue): void {
-    switch (target.type) {
-      case AvmValueType.Object: {
-        if (target.external) {
-          target.handler.set(key, value);
-        } else {
-          target.ownProperties.set(key, AvmPropDescriptor.data(value));
-        }
-        break;
-      }
-      default:
-        throw new Error("InvalidSetMemberTarget");
-    }
-  }
 }
 
 class RegisterTable {
@@ -549,8 +534,13 @@ export class ExecutionContext implements ActionContext {
     this.setStringMember(obj, this.toHostString(key), value);
   }
 
-  public setStringMember(obj: AvmValue, key: string, value: AvmValue): void {
-    this.vm.setMember(obj, key, value);
+  public setStringMember(target: AvmValue, key: string, value: AvmValue): void {
+    const targetObj: AvmObject = this.toAvmObject(target);
+    if (targetObj.external) {
+      targetObj.handler.set(key, value);
+    } else {
+      targetObj.ownProperties.set(key, AvmPropDescriptor.data(value));
+    }
   }
 
   public getOwnKeys(obj: AvmValue): AvmString[] {
@@ -588,8 +578,61 @@ export class ExecutionContext implements ActionContext {
     }
   }
 
-  public toAvmObject(_value: AvmValue): AvmObject {
-    throw new Error("NotImplemented: toAvmObject");
+  // Implementation of the ToObject algorithm from ECMA 262-3, section 9.9
+  public toAvmObject(value: AvmValue): AvmObject {
+    switch (value.type) {
+      case AvmValueType.Boolean:
+        return this.createBooleanBox(value.value);
+      case AvmValueType.Null:
+        throw new Error("TypeError: ToObject(AvmNull)");
+      case AvmValueType.Number:
+        return this.createNumberBox(value.value);
+      case AvmValueType.Object:
+        return value;
+      case AvmValueType.String:
+        return this.createStringBox(value.value);
+      case AvmValueType.Undefined:
+        throw new Error("TypeError: ToObject(AvmUndefined)");
+      default:
+        throw new Error(`UnexpectedAvmValueType: ${value}`);
+    }
+  }
+
+  public createBooleanBox(_value: boolean): AvmObject {
+    throw new Error("NotImplemented: createBooleanBox");
+    // return {
+    //   type: AvmValueType.Object,
+    //   external: false,
+    //   prototype: this.getRealm().booleanPrototype,
+    //   class: "String",
+    //   ownProperties: new Map(),
+    //   value,
+    //   callable: undefined,
+    // };
+  }
+
+  public createNumberBox(value: number): AvmObject {
+    return {
+      type: AvmValueType.Object,
+      external: false,
+      prototype: this.getRealm().numberPrototype,
+      class: "String",
+      ownProperties: new Map(),
+      value,
+      callable: undefined,
+    };
+  }
+
+  public createStringBox(value: string): AvmObject {
+    return {
+      type: AvmValueType.Object,
+      external: false,
+      prototype: this.getRealm().stringPrototype,
+      class: "String",
+      ownProperties: new Map(),
+      value,
+      callable: undefined,
+    };
   }
 
   // Implementation of the ToString algorithm from ECMA 262-3, section 9.8
