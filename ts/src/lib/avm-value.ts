@@ -121,6 +121,7 @@ export const AvmValue = {
     return bool ? AVM_TRUE : AVM_FALSE;
   },
   fromHostNumber(value: number): AvmNumber {
+    // TODO: Normalize `-0` to `+0`
     return {type: AvmValueType.Number, value};
   },
   fromHostString(value: string): AvmString {

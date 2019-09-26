@@ -44,7 +44,7 @@ import {
   ParameterState,
 } from "./function";
 import { Host, Target } from "./host";
-import { Realm } from "./realm";
+import { createRealm, Realm } from "./realm";
 import { DynamicScope, FunctionScope, Scope, StaticScope } from "./scope";
 import { Avm1Script, Avm1ScriptId, CfgTable } from "./script";
 import { AvmStack } from "./stack";
@@ -64,7 +64,7 @@ export class Vm {
   constructor() {
     this.nextScriptId = 0;
     this.scriptsById = new Map();
-    this.realm = new Realm();
+    this.realm = createRealm();
     this.constantPool = new AvmConstantPool();
   }
 

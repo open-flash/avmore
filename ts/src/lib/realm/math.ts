@@ -1,5 +1,6 @@
-import { AvmValue } from "../avm-value";
+import { AvmObject, AvmPropDescriptor, AvmSimpleObject, AvmValue, AvmValueType } from "../avm-value";
 import { HostCallContext } from "../function";
+import { bindingFromHostFunction } from "../realm";
 
 // > 15.8  The Math Object
 // >
@@ -18,28 +19,189 @@ import { HostCallContext } from "../function";
 // > In this specification, the phrase “the number value for x” has a technical meaning defined
 // > in 8.5.
 
-export function abs(ctx: HostCallContext): AvmValue {
+export interface MathRealm {
+  math: AvmObject;
+  mathAbs: AvmObject;
+  mathAcos: AvmObject;
+  mathAsin: AvmObject;
+  mathAtan: AvmObject;
+  mathAtan2: AvmObject;
+  mathCeil: AvmObject;
+  mathCos: AvmObject;
+  mathExp: AvmObject;
+  mathFloor: AvmObject;
+  mathLog: AvmObject;
+  mathMax: AvmObject;
+  mathMin: AvmObject;
+  mathPow: AvmObject;
+  mathRandom: AvmObject;
+  mathRound: AvmObject;
+  mathSin: AvmObject;
+  mathSqrt: AvmObject;
+  mathTan: AvmObject;
+}
+
+export function createMathRealm(funcProto: AvmSimpleObject, objectProto: AvmSimpleObject): MathRealm {
+  const _mathAbs: AvmObject = bindingFromHostFunction(funcProto, mathAbs);
+  const _mathAcos: AvmObject = bindingFromHostFunction(funcProto, mathAcos);
+  const _mathAsin: AvmObject = bindingFromHostFunction(funcProto, mathAsin);
+  const _mathAtan: AvmObject = bindingFromHostFunction(funcProto, mathAtan);
+  const _mathAtan2: AvmObject = bindingFromHostFunction(funcProto, mathAtan2);
+  const _mathCeil: AvmObject = bindingFromHostFunction(funcProto, mathCeil);
+  const _mathCos: AvmObject = bindingFromHostFunction(funcProto, mathCos);
+  const _mathExp: AvmObject = bindingFromHostFunction(funcProto, mathExp);
+  const _mathFloor: AvmObject = bindingFromHostFunction(funcProto, mathFloor);
+  const _mathLog: AvmObject = bindingFromHostFunction(funcProto, mathLog);
+  const _mathMax: AvmObject = bindingFromHostFunction(funcProto, mathMax);
+  const _mathMin: AvmObject = bindingFromHostFunction(funcProto, mathMin);
+  const _mathPow: AvmObject = bindingFromHostFunction(funcProto, mathPow);
+  const _mathRandom: AvmObject = bindingFromHostFunction(funcProto, mathRandom);
+  const _mathRound: AvmObject = bindingFromHostFunction(funcProto, mathRound);
+  const _mathSin: AvmObject = bindingFromHostFunction(funcProto, mathSin);
+  const _mathSqrt: AvmObject = bindingFromHostFunction(funcProto, mathSqrt);
+  const _mathTan: AvmObject = bindingFromHostFunction(funcProto, mathTan);
+
+  // Math
+  const _math: AvmSimpleObject = {
+    type: AvmValueType.Object,
+    external: false,
+    class: "Math",
+    prototype: objectProto,
+    ownProperties: new Map([
+      ["abs", AvmPropDescriptor.data(_mathAbs)],
+      ["acos", AvmPropDescriptor.data(_mathAcos)],
+      ["asin", AvmPropDescriptor.data(_mathAsin)],
+      ["atan", AvmPropDescriptor.data(_mathAtan)],
+      ["atan2", AvmPropDescriptor.data(_mathAtan2)],
+      ["ceil", AvmPropDescriptor.data(_mathCeil)],
+      ["cos", AvmPropDescriptor.data(_mathCos)],
+      ["exp", AvmPropDescriptor.data(_mathExp)],
+      ["floor", AvmPropDescriptor.data(_mathFloor)],
+      ["log", AvmPropDescriptor.data(_mathLog)],
+      ["max", AvmPropDescriptor.data(_mathMax)],
+      ["min", AvmPropDescriptor.data(_mathMin)],
+      ["pow", AvmPropDescriptor.data(_mathPow)],
+      ["random", AvmPropDescriptor.data(_mathRandom)],
+      ["round", AvmPropDescriptor.data(_mathRound)],
+      ["sin", AvmPropDescriptor.data(_mathSin)],
+      ["sqrt", AvmPropDescriptor.data(_mathSqrt)],
+      ["tan", AvmPropDescriptor.data(_mathTan)],
+    ]),
+    callable: undefined,
+  };
+
+  return {
+    math: _math,
+    mathAbs: _mathAbs,
+    mathAcos: _mathAcos,
+    mathAsin: _mathAsin,
+    mathAtan: _mathAtan,
+    mathAtan2: _mathAtan2,
+    mathCeil: _mathCeil,
+    mathCos: _mathCos,
+    mathExp: _mathExp,
+    mathFloor: _mathFloor,
+    mathLog: _mathLog,
+    mathMax: _mathMax,
+    mathMin: _mathMin,
+    mathPow: _mathPow,
+    mathRandom: _mathRandom,
+    mathRound: _mathRound,
+    mathSin: _mathSin,
+    mathSqrt: _mathSqrt,
+    mathTan: _mathTan,
+  };
+}
+
+export function mathAbs(ctx: HostCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.abs(x));
 }
 
-export function acos(ctx: HostCallContext): AvmValue {
+export function mathAcos(ctx: HostCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.acos(x));
 }
 
-export function asin(ctx: HostCallContext): AvmValue {
+export function mathAsin(ctx: HostCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.asin(x));
 }
 
-export function atan(ctx: HostCallContext): AvmValue {
+export function mathAtan(ctx: HostCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.atan(x));
 }
 
-export function atan2(ctx: HostCallContext): AvmValue {
+export function mathAtan2(ctx: HostCallContext): AvmValue {
+  const y: number = ctx.toHostNumber(ctx.getArg(0));
+  const x: number = ctx.toHostNumber(ctx.getArg(1));
+  return AvmValue.fromHostNumber(Math.atan2(y, x));
+}
+
+export function mathCeil(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  return AvmValue.fromHostNumber(Math.ceil(x));
+}
+
+export function mathCos(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  return AvmValue.fromHostNumber(Math.cos(x));
+}
+
+export function mathExp(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  return AvmValue.fromHostNumber(Math.exp(x));
+}
+
+export function mathFloor(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  return AvmValue.fromHostNumber(Math.floor(x));
+}
+
+export function mathLog(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  return AvmValue.fromHostNumber(Math.log(x));
+}
+
+export function mathMax(ctx: HostCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   const y: number = ctx.toHostNumber(ctx.getArg(1));
-  return AvmValue.fromHostNumber(Math.atan2(x, y));
+  return AvmValue.fromHostNumber(Math.max(x, y));
+}
+
+export function mathMin(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  const y: number = ctx.toHostNumber(ctx.getArg(1));
+  return AvmValue.fromHostNumber(Math.min(x, y));
+}
+
+export function mathPow(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  const y: number = ctx.toHostNumber(ctx.getArg(1));
+  return AvmValue.fromHostNumber(Math.pow(x, y));
+}
+
+export function mathRandom(_ctx: HostCallContext): AvmValue {
+  throw new Error("NotImplemented: Math.random");
+}
+
+export function mathRound(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  return AvmValue.fromHostNumber(Math.round(x));
+}
+
+export function mathSin(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  return AvmValue.fromHostNumber(Math.sin(x));
+}
+
+export function mathSqrt(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  return AvmValue.fromHostNumber(Math.sqrt(x));
+}
+
+export function mathTan(ctx: HostCallContext): AvmValue {
+  const x: number = ctx.toHostNumber(ctx.getArg(0));
+  return AvmValue.fromHostNumber(Math.tan(x));
 }

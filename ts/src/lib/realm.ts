@@ -10,187 +10,113 @@ import {
 } from "./avm-value";
 import { AvmCallResult, CallableType, CallType, HostCallContext, HostCallHandler } from "./function";
 import { ArrayRealm, createArrayRealm } from "./realm/array";
-import { abs, acos, asin, atan, atan2 } from "./realm/math";
+import { createMathRealm, MathRealm } from "./realm/math";
 import { numberConstructor } from "./realm/number";
 import { createStringRealm, StringRealm } from "./realm/string";
 
-export class Realm implements ArrayRealm, StringRealm {
-  public readonly objectClass: AvmObject;
-  public readonly objectProto: AvmObject;
-  public readonly funcClass: AvmObject;
-  public readonly funcProto: AvmObject;
+export interface Realm extends ArrayRealm, MathRealm, StringRealm {
+  objectClass: AvmObject;
+  objectProto: AvmObject;
+  funcClass: AvmObject;
+  funcProto: AvmObject;
 
-  public readonly array: AvmObject;
-  public readonly arrayPrototype: AvmObject;
-  public readonly arrayPrototypeToString: AvmObject;
-  public readonly arrayPrototypeToLocaleString: AvmObject;
-  public readonly arrayPrototypeJoin: AvmObject;
-  public readonly arrayPrototypePop: AvmObject;
-  public readonly arrayPrototypePush: AvmObject;
-  public readonly arrayPrototypeReverse: AvmObject;
-  public readonly arrayPrototypeShift: AvmObject;
-  public readonly arrayPrototypeSlice: AvmObject;
-  public readonly arrayPrototypeSort: AvmObject;
-  public readonly arrayPrototypeSplice: AvmObject;
-  public readonly arrayPrototypeUnshift: AvmObject;
+  numberClass: AvmObject;
+  numberProto: AvmObject;
+  globals: Map<string, AvmValue>;
+}
 
-  public readonly string: AvmObject;
-  public readonly stringFromCharCode: AvmObject;
-  public readonly stringPrototype: AvmObject;
-  public readonly stringPrototypeToString: AvmObject;
-  public readonly stringPrototypeValueOf: AvmObject;
-  public readonly stringPrototypeCharAt: AvmObject;
-  public readonly stringPrototypeCharCodeAt: AvmObject;
-  public readonly stringPrototypeConcat: AvmObject;
-  public readonly stringPrototypeIndexOf: AvmObject;
-  public readonly stringPrototypeLastIndexOf: AvmObject;
-  public readonly stringPrototypeSlice: AvmObject;
-  public readonly stringPrototypeSplit: AvmObject;
-  public readonly stringPrototypeSubstr: AvmObject;
-  public readonly stringPrototypeSubstring: AvmObject;
-  public readonly stringPrototypeToLowerCase: AvmObject;
-  public readonly stringPrototypeToUpperCase: AvmObject;
+export function createRealm(): Realm {
+  // Object.[[prototype]]
+  const objectProto: AvmSimpleObject = {
+    type: AvmValueType.Object,
+    external: false,
+    class: "Object",
+    prototype: AVM_NULL,
+    ownProperties: new Map(),
+    callable: undefined,
+  };
 
-  public readonly numberClass: AvmObject;
-  public readonly numberProto: AvmObject;
-  public readonly mathClass: AvmObject;
-  public readonly globals: Map<string, AvmValue>;
+  // Function.[[prototype]]
+  const funcProto: AvmSimpleObject = {
+    type: AvmValueType.Object,
+    external: false,
+    class: "Object",
+    prototype: objectProto,
+    ownProperties: new Map(),
+    callable: undefined,
+  };
 
-  constructor() {
-    // Object.[[prototype]]
-    const objectProto: AvmSimpleObject = {
-      type: AvmValueType.Object,
-      external: false,
-      class: "Object",
-      prototype: AVM_NULL,
-      ownProperties: new Map(),
-      callable: undefined,
-    };
+  // Object
+  const objectClass: AvmSimpleObject = {
+    type: AvmValueType.Object,
+    external: false,
+    class: "Function",
+    prototype: funcProto,
+    ownProperties: new Map(),
+    callable: {type: CallableType.Host, handler: objectConstructor},
+  };
 
-    // Function.[[prototype]]
-    const funcProto: AvmSimpleObject = {
-      type: AvmValueType.Object,
-      external: false,
-      class: "Object",
-      prototype: objectProto,
-      ownProperties: new Map(),
-      callable: undefined,
-    };
+  // Function
+  const funcClass: AvmSimpleObject = {
+    type: AvmValueType.Object,
+    external: false,
+    class: "Function",
+    prototype: funcProto,
+    ownProperties: new Map(),
+    callable: undefined, // TODO: Function callable/constructor
+  };
 
-    // Object
-    const objectClass: AvmSimpleObject = {
-      type: AvmValueType.Object,
-      external: false,
-      class: "Function",
-      prototype: funcProto,
-      ownProperties: new Map(),
-      callable: {type: CallableType.Host, handler: objectConstructor},
-    };
+  // Number.prototype
+  const numberProto: AvmSimpleObject = {
+    type: AvmValueType.Object,
+    external: false,
+    class: "Object",
+    prototype: funcProto,
+    ownProperties: new Map(),
+    callable: undefined,
+  };
 
-    // Function
-    const funcClass: AvmSimpleObject = {
-      type: AvmValueType.Object,
-      external: false,
-      class: "Function",
-      prototype: funcProto,
-      ownProperties: new Map(),
-      callable: undefined, // TODO: Function callable/constructor
-    };
+  // Number
+  const numberClass: AvmSimpleObject = {
+    type: AvmValueType.Object,
+    external: false,
+    class: "Function",
+    prototype: numberProto,
+    ownProperties: new Map(),
+    callable: {type: CallableType.Host, handler: numberConstructor},
+  };
 
-    // Number.prototype
-    const numberProto: AvmSimpleObject = {
-      type: AvmValueType.Object,
-      external: false,
-      class: "Object",
-      prototype: funcProto,
-      ownProperties: new Map(),
-      callable: undefined,
-    };
+  objectClass.ownProperties.set("prototype", AvmPropDescriptor.data(objectProto));
+  populateObjectProto(objectProto.ownProperties, funcProto);
 
-    // Number
-    const numberClass: AvmSimpleObject = {
-      type: AvmValueType.Object,
-      external: false,
-      class: "Function",
-      prototype: numberProto,
-      ownProperties: new Map(),
-      callable: {type: CallableType.Host, handler: numberConstructor},
-    };
+  const arrayRealm: ArrayRealm = createArrayRealm(funcProto);
+  const mathRealm: MathRealm = createMathRealm(funcProto, objectProto);
+  const stringRealm: StringRealm = createStringRealm(funcProto);
 
-    // Math
-    const mathClass: AvmSimpleObject = {
-      type: AvmValueType.Object,
-      external: false,
-      class: "Math",
-      prototype: objectProto,
-      ownProperties: new Map([
-        ["abs", AvmPropDescriptor.data(bindingFromHostFunction(funcProto, abs))],
-        ["acos", AvmPropDescriptor.data(bindingFromHostFunction(funcProto, acos))],
-        ["asin", AvmPropDescriptor.data(bindingFromHostFunction(funcProto, asin))],
-        ["atan", AvmPropDescriptor.data(bindingFromHostFunction(funcProto, atan))],
-        ["atan2", AvmPropDescriptor.data(bindingFromHostFunction(funcProto, atan2))],
-      ]),
-      callable: undefined,
-    };
+  const globals: Map<string, AvmValue> = new Map([
+    ["Object", objectClass],
+    ["Array", arrayRealm.array],
+    ["String", stringRealm.string],
+    ["Number", numberClass],
+    ["Math", mathRealm.math],
+    ["ASnative", bindingFromHostFunction(funcProto, asNativeHandler)],
+    ["ASconstructor", bindingFromHostFunction(funcProto, asConstructorHandler)],
+    ["ASSetNative", bindingFromHostFunction(funcProto, asSetNativeHandler)],
+    ["ASSetPropFlags", bindingFromHostFunction(funcProto, asSetPropFlagsHandler)],
+  ]);
 
-    objectClass.ownProperties.set("prototype", AvmPropDescriptor.data(objectProto));
-    populateObjectProto(objectProto.ownProperties, funcProto);
-
-    const arrayRealm: ArrayRealm = createArrayRealm(funcProto);
-    const stringRealm: StringRealm = createStringRealm(funcProto);
-
-    this.objectClass = objectClass;
-    this.objectProto = objectProto;
-    this.funcClass = funcClass;
-    this.funcProto = funcProto;
-
-    this.array = arrayRealm.array;
-    this.arrayPrototype = arrayRealm.arrayPrototype;
-    this.arrayPrototypeToString = arrayRealm.arrayPrototypeToString;
-    this.arrayPrototypeToLocaleString = arrayRealm.arrayPrototypeToLocaleString;
-    this.arrayPrototypeJoin = arrayRealm.arrayPrototypeJoin;
-    this.arrayPrototypePop = arrayRealm.arrayPrototypePop;
-    this.arrayPrototypePush = arrayRealm.arrayPrototypePush;
-    this.arrayPrototypeReverse = arrayRealm.arrayPrototypeReverse;
-    this.arrayPrototypeShift = arrayRealm.arrayPrototypeShift;
-    this.arrayPrototypeSlice = arrayRealm.arrayPrototypeSlice;
-    this.arrayPrototypeSort = arrayRealm.arrayPrototypeSort;
-    this.arrayPrototypeSplice = arrayRealm.arrayPrototypeSplice;
-    this.arrayPrototypeUnshift = arrayRealm.arrayPrototypeUnshift;
-
-    this.string = stringRealm.string;
-    this.stringFromCharCode = stringRealm.stringFromCharCode;
-    this.stringPrototype = stringRealm.stringPrototype;
-    this.stringPrototypeToString = stringRealm.stringPrototypeToString;
-    this.stringPrototypeValueOf = stringRealm.stringPrototypeValueOf;
-    this.stringPrototypeCharAt = stringRealm.stringPrototypeCharAt;
-    this.stringPrototypeCharCodeAt = stringRealm.stringPrototypeCharCodeAt;
-    this.stringPrototypeConcat = stringRealm.stringPrototypeConcat;
-    this.stringPrototypeIndexOf = stringRealm.stringPrototypeIndexOf;
-    this.stringPrototypeLastIndexOf = stringRealm.stringPrototypeLastIndexOf;
-    this.stringPrototypeSlice = stringRealm.stringPrototypeSlice;
-    this.stringPrototypeSplit = stringRealm.stringPrototypeSplit;
-    this.stringPrototypeSubstr = stringRealm.stringPrototypeSubstr;
-    this.stringPrototypeSubstring = stringRealm.stringPrototypeSubstring;
-    this.stringPrototypeToLowerCase = stringRealm.stringPrototypeToLowerCase;
-    this.stringPrototypeToUpperCase = stringRealm.stringPrototypeToUpperCase;
-
-    this.numberClass = numberClass;
-    this.numberProto = numberProto;
-    this.mathClass = mathClass;
-
-    this.globals = new Map([
-      ["Object", objectClass],
-      ["Array", this.array],
-      ["String", this.string],
-      ["Number", numberClass],
-      ["Math", mathClass],
-      ["ASnative", bindingFromHostFunction(funcProto, asNativeHandler)],
-      ["ASconstructor", bindingFromHostFunction(funcProto, asConstructorHandler)],
-      ["ASSetNative", bindingFromHostFunction(funcProto, asSetNativeHandler)],
-      ["ASSetPropFlags", bindingFromHostFunction(funcProto, asSetPropFlagsHandler)],
-    ]);
-  }
+  return {
+    objectClass,
+    objectProto,
+    funcClass,
+    funcProto,
+    numberClass,
+    numberProto,
+    globals,
+    ...arrayRealm,
+    ...mathRealm,
+    ...stringRealm,
+  };
 }
 
 export function bindingFromHostFunction(funcProto: AvmObject, handler: HostCallHandler): AvmObject {
