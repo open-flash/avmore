@@ -1,6 +1,7 @@
 import chai from "chai";
 import fs from "fs";
 import sysPath from "path";
+import { AvmPropDescriptor, AvmSimpleObject } from "../lib/avm-value";
 import { LoggedHost } from "../lib/host";
 import { Vm } from "../lib/vm";
 import meta from "./meta.js";
@@ -33,6 +34,20 @@ describe("avm1", function () {
       const expectedLogs: string = await readTextFile(sample.logPath);
 
       const vm: Vm = new Vm();
+
+      const globalObject: AvmSimpleObject = vm.newObject();
+      vm.realm.globals.set("_global", globalObject);
+      {
+        const flashPackage: AvmSimpleObject = vm.newObject();
+        globalObject.ownProperties.set("flash", AvmPropDescriptor.data(flashPackage));
+        flashPackage.ownProperties.set("_MovieClip", AvmPropDescriptor.data(vm.newObject()));
+        flashPackage.ownProperties.set("display", AvmPropDescriptor.data(vm.newObject()));
+        flashPackage.ownProperties.set("filters", AvmPropDescriptor.data(vm.newObject()));
+        flashPackage.ownProperties.set("geom", AvmPropDescriptor.data(vm.newObject()));
+        flashPackage.ownProperties.set("text", AvmPropDescriptor.data(vm.newObject()));
+      }
+      globalObject.ownProperties.set("haxe", AvmPropDescriptor.data(vm.newObject()));
+
       const host: LoggedHost = new LoggedHost();
 
       const scriptId: number = vm.createAvm1Script(inputBytes, null, null);

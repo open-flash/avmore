@@ -18,6 +18,7 @@ export class Realm {
   public readonly funcProto: AvmObject;
   public readonly arrayClass: AvmObject;
   public readonly arrayProto: AvmObject;
+  public readonly globals: Map<string, AvmValue>;
 
   constructor() {
     // Object.[[prototype]]
@@ -80,7 +81,7 @@ export class Realm {
       callable: undefined,
     };
 
-    objectClass.callable = createObjectCall();
+    objectClass.callable = createObjectCall(objectClass, objectProto);
     objectClass.ownProperties.set("prototype", AvmPropDescriptor.data(objectProto));
     populateObjectProto(objectProto.ownProperties, funcProto);
 
@@ -94,6 +95,10 @@ export class Realm {
     this.funcProto = funcProto;
     this.arrayClass = arrayClass;
     this.arrayProto = arrayProto;
+    this.globals = new Map([
+      ["Object", objectClass],
+      ["Array", arrayClass],
+    ]);
   }
 }
 
@@ -108,10 +113,79 @@ function bindingFromHostFunction(funcProto: AvmObject, handler: HostCallHandler)
   };
 }
 
-function createObjectCall(): HostFunction {
+// > 15.2 Object Objects
+
+function createObjectCall(objectClass: AvmSimpleObject, objectProto: AvmSimpleObject): HostFunction {
   return {type: CallableType.Host, handler};
-  function handler(_ctx: HostCallContext): AvmCallResult {
-    throw new Error("NotImplemented");
+
+  function handler(ctx: HostCallContext): AvmCallResult {
+    if (ctx.callType === CallType.Apply) {
+      // > 15.2.1 The Object Constructor Called as a Function
+      // >
+      // > When Object is called as a function rather than as a constructor, it performs a type
+      // > conversion.
+
+      // > 15.2.1.1 Object ( [ value ] )
+      // >
+      // > When the Object function is called with no arguments or with one argument value, the
+      // > following steps are taken:
+      const value: AvmValue = ctx.getArg(0);
+      // > 1. If _value_ is `null`, `undefined` or not supplied, create and return a new Object
+      // > object exactly if the object constructor had been called with the same arguments
+      // > (15.2.2.1).
+      if (value.type === AvmValueType.Null || value.type === AvmValueType.Undefined) {
+        return ctx.construct(objectClass, ctx.args);
+      }
+      // 2. Return ToObject(value).
+      return ctx.toAvmObject(value);
+    } else {
+      // assert: callType === CallType.Construct
+
+      // > 15.2.2 The Object Constructor
+      // >
+      // > When `Object` is called as part of a `new` expression, it is a constructor that may
+      // > create an object.
+
+      // > 15.2.2.1 new Object ( [ value ] )
+      // >
+      // > When the `Object` constructor is called with no arguments or with one argument _value_,
+      // > the following steps are taken:
+      // > 1. If value is not supplied, go to step 8.
+      if (ctx.args.length >= 1) {
+        const value: AvmValue = ctx.args[0];
+        // > 2. If the type of value is not Object, go to step 5.
+        if (value.type === AvmValueType.Object) {
+          // > 3. If the value is a native ECMAScript object, do not create a new object but simply
+          // >    return value.
+          if (!value.external) {
+            return value;
+          }
+          // > 4. If the value is a host object, then actions are taken and a result is returned in
+          // >    an implementation-dependent manner that may depend on the host object.
+          // (No such case)
+        }
+
+        // 5. If the type of value is String, return ToObject(value).
+        // 6. If the type of value is Boolean, return ToObject(value).
+        // 7. If the type of value is Number, return ToObject(value).
+        throw new Error("NotImplemented: BoxablePrimitive");
+      }
+
+      // > 8. (The argument value was not supplied or its type was Null or Undefined.)
+      // >    Create a new native ECMAScript object.
+      // >    The [[Prototype]] property of the newly constructed object is set to the Object
+      // >    prototype object.
+      // >    The [[Class]] property of the newly constructed object is set to "Object".
+      // >    The newly constructed object has no [[Value]] property.
+      // >    Return the newly created native object.
+      return {
+        type: AvmValueType.Object,
+        external: false,
+        class: "Object",
+        prototype: objectProto,
+        ownProperties: new Map(),
+      };
+    }
   }
 }
 
@@ -138,6 +212,7 @@ function populateObjectProto(
 
 function createArrayCall(arrayClass: AvmSimpleObject, arrayProto: AvmSimpleObject): HostFunction {
   return {type: CallableType.Host, handler};
+
   function handler(ctx: HostCallContext): AvmCallResult {
     // > 15.4.1 The Array Constructor Called as a Function
     // >

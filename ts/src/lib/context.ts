@@ -1,5 +1,5 @@
 import { Uint32, UintSize } from "semantic-types";
-import { AvmBoolean, AvmNumber, AvmSimpleObject, AvmString, AvmUndefined, AvmValue } from "./avm-value";
+import { AvmBoolean, AvmNumber, AvmObject, AvmSimpleObject, AvmString, AvmUndefined, AvmValue } from "./avm-value";
 import { AvmCallResult, AvmFunctionParameter, ParameterState } from "./function";
 import { CfgTable } from "./script";
 
@@ -18,6 +18,8 @@ export interface BaseContext {
   // Conversions
 
   toAvmBoolean(value: AvmValue): AvmBoolean;
+
+  toAvmObject(value: AvmValue): AvmObject;
 
   toAvmString(value: AvmValue): AvmString;
 

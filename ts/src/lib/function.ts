@@ -161,6 +161,10 @@ class HostCallContextImpl implements BaseHostCallContext {
     return this.ctx.toAvmBoolean(value);
   }
 
+  toAvmObject(value: AvmValue): AvmObject {
+    return this.ctx.toAvmObject(value);
+  }
+
   toAvmString(value: AvmValue): AvmString {
     return this.ctx.toAvmString(value);
   }

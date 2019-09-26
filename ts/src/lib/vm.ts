@@ -7,6 +7,7 @@ import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
 import { NullableCfgLabel } from "avm1-tree/cfg-label";
+import { Incident } from "incident";
 import { Sint32, Uint32, UintSize } from "semantic-types";
 import * as actions from "./actions";
 import {
@@ -248,10 +249,15 @@ export class ExecutionContext implements ActionContext {
   }
 
   public static runScript(vm: Vm, host: Host, budget: RunBudget, script: Avm1Script): void {
+    const globalScope: StaticScope = new StaticScope(undefined);
+    for (const [globalName, globalValue] of vm.realm.globals) {
+      globalScope.variables.set(globalName, globalValue);
+    }
+
     const activation: ScriptActivation = new ScriptActivation(script);
     const scope: Scope = script.rootScope !== null
-      ? new DynamicScope(script.rootScope, undefined)
-      : new StaticScope(undefined);
+      ? new DynamicScope(script.rootScope, globalScope)
+      : new StaticScope(globalScope);
     const stack: AvmStack = new AvmStack();
     const registers: RegisterTable = new RegisterTable(4);
     const target: TargetId | null = script.target; // Initialize with default target
@@ -278,8 +284,16 @@ export class ExecutionContext implements ActionContext {
     while (this.budget.totalActions < this.budget.maxActions) {
       if (this.budget.totalActions >= this.budget.maxActions) {
       }
-      for (const action of block.actions) {
-        this.exec(action);
+      for (const [i, action] of block.actions.entries()) {
+        try {
+          this.exec(action);
+        } catch (e) {
+          if (e instanceof AvmCatchableError) {
+            throw e;
+          } else {
+            throw Incident(e, "SimpleActionError", {blockLabel: block.label, actionIndex: i});
+          }
+        }
         this.budget.totalActions++;
       }
       let flowResult: FlowResult;
@@ -456,6 +470,7 @@ export class ExecutionContext implements ActionContext {
       ownProperties: new Map(),
       callable: fn,
     };
+    fnObj.ownProperties.set("prototype", AvmPropDescriptor.data(this.vm.newObject()));
 
     return fnObj;
   }
@@ -540,6 +555,10 @@ export class ExecutionContext implements ActionContext {
     }
   }
 
+  public toAvmObject(_value: AvmValue): AvmObject {
+    throw new Error("NotImplemented: toAvmObject");
+  }
+
   // Implementation of the ToString algorithm from ECMA 262-3, section 9.8
   public toAvmString(avmValue: AvmValue): AvmString {
     const primitive: AvmPrimitive = this.toAvmPrimitive(avmValue, ToPrimitiveHint.String);
@@ -552,7 +571,7 @@ export class ExecutionContext implements ActionContext {
         let str: string = primitive.value.toString(10);
         // Naive restriction to 14 decimals
         // TODO: Follow Actionscript's stringification more closely
-        str = str.replace(/^(\d+\.\d{0,14})\d*$/, "$1")
+        str = str.replace(/^(\d+\.\d{0,14})\d*$/, "$1");
         return AvmValue.fromHostString(str);
       }
       case AvmValueType.String:
