@@ -657,6 +657,10 @@ export class ExecutionContext implements ActionContext {
     this.scope.setLocal(this, varName, value);
   }
 
+  public touchLocal(varName: string): void {
+    this.scope.touchLocal(this, varName);
+  }
+
   public push(value: AvmValue): void {
     this.stack.push(value);
   }

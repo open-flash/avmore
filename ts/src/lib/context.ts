@@ -80,6 +80,8 @@ export interface ScopeContext {
   setVar(varName: string, value: AvmValue): void;
 
   setLocal(varName: string, value: AvmValue): void;
+
+  touchLocal(varName: string): void;
 }
 
 export interface RegisterContext {

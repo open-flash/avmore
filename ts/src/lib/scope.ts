@@ -1,4 +1,4 @@
-import { AvmValue } from "./avm-value";
+import { AVM_UNDEFINED, AvmValue } from "./avm-value";
 import { BaseContext } from "./context";
 import { AvmFunction } from "./function";
 
@@ -45,11 +45,29 @@ abstract class BaseScope {
     this.setLocal(ctx, varName, value);
   }
 
+  // Ensures the local variable exists
+  // If it already exists, don't do anything.
+  // If it does not exist, initialize the local variable with `undefined`
+  public touchLocal(ctx: BaseContext, varName: string): void {
+    if (!this.hasLocal(ctx, varName)) {
+      this.setLocal(ctx, varName, AVM_UNDEFINED);
+    }
+  }
+
   public abstract setLocal(ctx: BaseContext, varName: string, value: AvmValue): void;
+
+  protected updateLocal(ctx: BaseContext, varName: string, value: AvmValue): boolean {
+    if (this.hasLocal(ctx, varName)) {
+      this.setLocal(ctx, varName, value);
+      return true;
+    } else {
+      return false;
+    }
+  }
 
   protected abstract tryGetLocal(ctx: BaseContext, varName: string): AvmValue | undefined;
 
-  protected abstract updateLocal(ctx: BaseContext, varName: string, value: AvmValue): boolean;
+  protected abstract hasLocal(ctx: BaseContext, varName: string): boolean;
 }
 
 /**
@@ -57,6 +75,7 @@ abstract class BaseScope {
  *
  * Used as the `MovieClip` (root) scope, `with` statements, etc.
  */
+// TODO: Check how it interracts with `__resolve`, getters and prototype.
 export class DynamicScope extends BaseScope {
   readonly type: ScopeType.Dynamic;
   readonly parent?: Scope;
@@ -77,14 +96,8 @@ export class DynamicScope extends BaseScope {
     return ctx.tryGetStringMember(this.target, varName);
   }
 
-  protected updateLocal(ctx: BaseContext, varName: string, value: AvmValue): boolean {
-    // TODO: Check how it interracts with `__resolve`, getters and prototype.
-    if (ctx.tryGetStringMember(this.target, varName)) {
-      this.setLocal(ctx, varName, value);
-      return true;
-    } else {
-      return false;
-    }
+  protected hasLocal(ctx: BaseContext, varName: string): boolean {
+    return ctx.tryGetStringMember(this.target, varName) !== undefined;
   }
 }
 
@@ -109,13 +122,8 @@ export class FunctionScope extends BaseScope {
     return this.variables.get(varName);
   }
 
-  protected updateLocal(ctx: BaseContext, varName: string, value: AvmValue): boolean {
-    if (this.variables.has(varName)) {
-      this.setLocal(ctx, varName, value);
-      return true;
-    } else {
-      return false;
-    }
+  protected hasLocal(_ctx: BaseContext, varName: string): boolean {
+    return this.variables.has(varName);
   }
 }
 
@@ -144,12 +152,7 @@ export class StaticScope extends BaseScope {
     return this.variables.get(varName);
   }
 
-  protected updateLocal(ctx: BaseContext, varName: string, value: AvmValue): boolean {
-    if (this.variables.has(varName)) {
-      this.setLocal(ctx, varName, value);
-      return true;
-    } else {
-      return false;
-    }
+  protected hasLocal(_ctx: BaseContext, varName: string): boolean {
+    return this.variables.has(varName);
   }
 }

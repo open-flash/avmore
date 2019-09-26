@@ -48,6 +48,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.DefineLocal:
       defineLocal(ctx);
       break;
+    case ActionType.DefineLocal2:
+      defineLocal2(ctx);
+      break;
     case ActionType.Divide:
       divide(ctx);
       break;
@@ -240,6 +243,11 @@ export function defineLocal(ctx: ActionContext): void {
   const value: AvmValue = ctx.pop();
   const name: string = ctx.toHostString(ctx.pop());
   ctx.setLocal(name, value);
+}
+
+export function defineLocal2(ctx: ActionContext): void {
+  const name: string = ctx.toHostString(ctx.pop());
+  ctx.touchLocal(name);
 }
 
 export function divide(ctx: ActionContext): void {
