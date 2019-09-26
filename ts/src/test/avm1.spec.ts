@@ -37,6 +37,7 @@ describe("avm1", function () {
 
       const globalObject: AvmSimpleObject = vm.newObject();
       vm.realm.globals.set("_global", globalObject);
+      vm.realm.globals.set("_root", globalObject);
       for (const [globalName, globalValue] of vm.realm.globals) {
         globalObject.ownProperties.set(globalName, AvmPropDescriptor.data(globalValue));
       }

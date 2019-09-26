@@ -12,9 +12,9 @@ import { AvmCallResult, CallableType, CallType, HostCallContext, HostCallHandler
 import { ArrayRealm, createArrayRealm } from "./realm/array";
 import { abs, acos, asin, atan, atan2 } from "./realm/math";
 import { numberConstructor } from "./realm/number";
-import { stringConstructor } from "./realm/string";
+import { createStringRealm, StringRealm } from "./realm/string";
 
-export class Realm implements ArrayRealm {
+export class Realm implements ArrayRealm, StringRealm {
   public readonly objectClass: AvmObject;
   public readonly objectProto: AvmObject;
   public readonly funcClass: AvmObject;
@@ -34,8 +34,23 @@ export class Realm implements ArrayRealm {
   public readonly arrayPrototypeSplice: AvmObject;
   public readonly arrayPrototypeUnshift: AvmObject;
 
-  public readonly stringClass: AvmObject;
-  public readonly stringProto: AvmObject;
+  public readonly string: AvmObject;
+  public readonly stringFromCharCode: AvmObject;
+  public readonly stringPrototype: AvmObject;
+  public readonly stringPrototypeToString: AvmObject;
+  public readonly stringPrototypeValueOf: AvmObject;
+  public readonly stringPrototypeCharAt: AvmObject;
+  public readonly stringPrototypeCharCodeAt: AvmObject;
+  public readonly stringPrototypeConcat: AvmObject;
+  public readonly stringPrototypeIndexOf: AvmObject;
+  public readonly stringPrototypeLastIndexOf: AvmObject;
+  public readonly stringPrototypeSlice: AvmObject;
+  public readonly stringPrototypeSplit: AvmObject;
+  public readonly stringPrototypeSubstr: AvmObject;
+  public readonly stringPrototypeSubstring: AvmObject;
+  public readonly stringPrototypeToLowerCase: AvmObject;
+  public readonly stringPrototypeToUpperCase: AvmObject;
+
   public readonly numberClass: AvmObject;
   public readonly numberProto: AvmObject;
   public readonly mathClass: AvmObject;
@@ -82,26 +97,6 @@ export class Realm implements ArrayRealm {
       callable: undefined, // TODO: Function callable/constructor
     };
 
-    // String.prototype
-    const stringProto: AvmSimpleObject = {
-      type: AvmValueType.Object,
-      external: false,
-      class: "Object",
-      prototype: funcProto,
-      ownProperties: new Map(),
-      callable: undefined,
-    };
-
-    // String
-    const stringClass: AvmSimpleObject = {
-      type: AvmValueType.Object,
-      external: false,
-      class: "Function",
-      prototype: funcProto,
-      ownProperties: new Map(),
-      callable: {type: CallableType.Host, handler: stringConstructor},
-    };
-
     // Number.prototype
     const numberProto: AvmSimpleObject = {
       type: AvmValueType.Object,
@@ -141,10 +136,8 @@ export class Realm implements ArrayRealm {
     objectClass.ownProperties.set("prototype", AvmPropDescriptor.data(objectProto));
     populateObjectProto(objectProto.ownProperties, funcProto);
 
-    stringClass.ownProperties.set("prototype", AvmPropDescriptor.data(stringProto));
-    populateStringProto(stringProto.ownProperties, stringClass);
-
     const arrayRealm: ArrayRealm = createArrayRealm(funcProto);
+    const stringRealm: StringRealm = createStringRealm(funcProto);
 
     this.objectClass = objectClass;
     this.objectProto = objectProto;
@@ -165,8 +158,23 @@ export class Realm implements ArrayRealm {
     this.arrayPrototypeSplice = arrayRealm.arrayPrototypeSplice;
     this.arrayPrototypeUnshift = arrayRealm.arrayPrototypeUnshift;
 
-    this.stringClass = stringClass;
-    this.stringProto = stringProto;
+    this.string = stringRealm.string;
+    this.stringFromCharCode = stringRealm.stringFromCharCode;
+    this.stringPrototype = stringRealm.stringPrototype;
+    this.stringPrototypeToString = stringRealm.stringPrototypeToString;
+    this.stringPrototypeValueOf = stringRealm.stringPrototypeValueOf;
+    this.stringPrototypeCharAt = stringRealm.stringPrototypeCharAt;
+    this.stringPrototypeCharCodeAt = stringRealm.stringPrototypeCharCodeAt;
+    this.stringPrototypeConcat = stringRealm.stringPrototypeConcat;
+    this.stringPrototypeIndexOf = stringRealm.stringPrototypeIndexOf;
+    this.stringPrototypeLastIndexOf = stringRealm.stringPrototypeLastIndexOf;
+    this.stringPrototypeSlice = stringRealm.stringPrototypeSlice;
+    this.stringPrototypeSplit = stringRealm.stringPrototypeSplit;
+    this.stringPrototypeSubstr = stringRealm.stringPrototypeSubstr;
+    this.stringPrototypeSubstring = stringRealm.stringPrototypeSubstring;
+    this.stringPrototypeToLowerCase = stringRealm.stringPrototypeToLowerCase;
+    this.stringPrototypeToUpperCase = stringRealm.stringPrototypeToUpperCase;
+
     this.numberClass = numberClass;
     this.numberProto = numberProto;
     this.mathClass = mathClass;
@@ -174,7 +182,7 @@ export class Realm implements ArrayRealm {
     this.globals = new Map([
       ["Object", objectClass],
       ["Array", this.array],
-      ["String", stringClass],
+      ["String", this.string],
       ["Number", numberClass],
       ["Math", mathClass],
       ["ASnative", bindingFromHostFunction(funcProto, asNativeHandler)],
@@ -287,13 +295,6 @@ function populateObjectProto(
     const value: string = `[object ${tag}]`;
     return AvmValue.fromHostString(value);
   }
-}
-
-function populateStringProto(
-  props: Map<string, AvmPropDescriptor>,
-  stringClass: AvmSimpleObject,
-): void {
-  props.set("constructor", AvmPropDescriptor.data(stringClass));
 }
 
 // ASnative
