@@ -410,7 +410,8 @@ export class ExecutionContext implements ActionContext {
 
   public apply(fn: AvmValue, thisArg: AvmValue, args: ReadonlyArray<AvmValue>): AvmCallResult {
     if (fn.type !== AvmValueType.Object) {
-      throw new Error("CannotApplyNonObject");
+      return AVM_UNDEFINED;
+      // throw new Error("CannotApplyNonObject");
     }
     if (fn.external) {
       if (fn.handler.apply === undefined) {
