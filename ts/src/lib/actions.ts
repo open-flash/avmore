@@ -4,7 +4,7 @@ import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgDefineFunction } from "avm1-tree/cfg-actions/cfg-define-function";
 import { CfgDefineFunction2 } from "avm1-tree/cfg-actions/cfg-define-function2";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
-import { UintSize } from "semantic-types";
+import { Uint32, UintSize } from "semantic-types";
 import { AVM_NULL, AVM_UNDEFINED, AvmSimpleObject, AvmString, AvmValue } from "./avm-value";
 import { ActionContext } from "./context";
 import { AvmFunctionParameter, ParameterState } from "./function";
@@ -72,6 +72,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
       break;
     case ActionType.GetMember:
       getMember(ctx);
+      break;
+    case ActionType.GetProperty:
+      getProperty(ctx);
       break;
     case ActionType.GetVariable:
       getVariable(ctx);
@@ -288,6 +291,41 @@ export function getMember(ctx: ActionContext): void {
   const key: AvmValue = ctx.pop();
   const target: AvmValue = ctx.pop();
   ctx.push(ctx.getMember(target, key));
+}
+
+const PROPERTY_INDEX_TO_KEY: ReadonlyMap<Uint32, string> = new Map([
+  [0, "_X"],
+  [1, "_Y"],
+  [2, "_xscale"],
+  [3, "_yscale"],
+  [4, "_currentframe"],
+  [5, "_totalframes"],
+  [6, "_alpha"],
+  [7, "_visible"],
+  [8, "_width"],
+  [9, "_height"],
+  [10, "_rotation"],
+  [11, "_target"],
+  [12, "_framesloaded"],
+  [13, "_name"],
+  [14, "_droptarget"],
+  [15, "_url"],
+  [16, "_highquality"],
+  [17, "_focusrect"],
+  [18, "_soundbuftime"],
+  [19, "_quality"],
+  [20, "_xmouse"],
+  [21, "_ymouse"],
+]);
+
+export function getProperty(ctx: ActionContext): void {
+  const keyIndex: Uint32 = ctx.toHostUint32(ctx.pop());
+  const target: AvmValue = ctx.pop();
+  const key: string | undefined = PROPERTY_INDEX_TO_KEY.get(keyIndex);
+  if (key === undefined) {
+    throw new Error(`InvalidPropertyIndex: ${keyIndex}`);
+  }
+  ctx.push(ctx.getStringMember(target, key));
 }
 
 export function getVariable(ctx: ActionContext): void {
