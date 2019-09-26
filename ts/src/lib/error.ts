@@ -23,3 +23,15 @@ export class TargetHasNoPropertyWarning {
     return `Warning: '${this.targetName}' has no property '${this.propertyName}'`;
   }
 }
+
+export class UncaughtException {
+  public readonly valueString: string;
+
+  constructor(valueString: string) {
+    this.valueString = valueString;
+  }
+
+  toString(): string {
+    return `Warning: Uncaught exception, ${this.valueString}`;
+  }
+}

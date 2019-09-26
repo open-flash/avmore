@@ -3,6 +3,7 @@
 import { cfgFromBytes } from "avm1-parser";
 import { ActionType } from "avm1-tree/action-type";
 import { GotoFrame, SetTarget } from "avm1-tree/actions";
+import { CatchTargetType } from "avm1-tree/catch-targets/_type";
 import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
@@ -32,7 +33,7 @@ import {
 } from "./avm-value";
 import { AvmConstantPool } from "./constant-pool";
 import { ActionContext, RunBudget, StackContext } from "./context";
-import { ReferenceToUndeclaredVariableWarning, TargetHasNoPropertyWarning } from "./error";
+import { ReferenceToUndeclaredVariableWarning, TargetHasNoPropertyWarning, UncaughtException } from "./error";
 import {
   AvmCallResult,
   AvmFunction,
@@ -87,17 +88,7 @@ export class Vm {
       throw new Error(`ScriptNotFound: ${scriptId}`);
     }
     const budget: RunBudget = {maxActions, totalActions: 0};
-    try {
-      ExecutionContext.runScript(this, host, budget, script);
-    } catch (e) {
-      if (e instanceof AbortSignal) {
-        return;
-      } else if (e instanceof AvmThrowSignal) {
-        throw new Incident("UnhandledAvmException", {value: e.value});
-      } else {
-        throw e;
-      }
-    }
+    ExecutionContext.runScript(this, host, budget, script);
   }
 
   public newExternal(handler: AvmExternalHandler): AvmExternalObject {
@@ -293,7 +284,19 @@ export class ExecutionContext implements ActionContext {
       thisArg,
     );
 
-    ctx.runCfg(script.cfgTable);
+    try {
+      ctx.runCfg(script.cfgTable);
+    } catch (e) {
+      if (e instanceof AbortSignal) {
+        return;
+      } else if (e instanceof AvmThrowSignal) {
+        // TODO: Handle erors thrown when converting this error to string
+        const valueString: string = ctx.toHostString(e.value);
+        host.warn(new UncaughtException(valueString));
+      } else {
+        throw e;
+      }
+    }
   }
 
   public runCfg(cfgTable: CfgTable): FlowResult {
@@ -342,9 +345,9 @@ export class ExecutionContext implements ActionContext {
         }
         case CfgBlockType.Try: {
           const tryTable: CfgTable = new CfgTable(block.try);
-          const catchTable: CfgTable | undefined = block.catch !== undefined
+          const onErrorTable: CfgTable | undefined = block.catch !== undefined
             ? new CfgTable(block.catch)
-            : undefined;
+            : (block.finally !== undefined ? new CfgTable(block.finally) : undefined);
           const finallyTable: CfgTable | undefined = block.finally !== undefined
             ? new CfgTable(block.finally)
             : undefined;
@@ -357,10 +360,21 @@ export class ExecutionContext implements ActionContext {
               throw e;
             }
 
-            // TODO try/finally
-            if (catchTable !== undefined) {
-              // TODO: Add error value to scope
-              flowResult = this.runCfg(catchTable);
+            if (onErrorTable !== undefined) {
+              if (block.catch !== undefined) {
+                switch (block.catchTarget.type) {
+                  case CatchTargetType.Register:
+                    this.setReg(block.catchTarget.target, e.value);
+                    break;
+                  case CatchTargetType.Variable:
+                    this.setVar(block.catchTarget.target, e.value);
+                    break;
+                  default:
+                    throw new Error("UnexpectedCatchTargetType");
+                }
+              }
+
+              flowResult = this.runCfg(onErrorTable);
             } else {
               throw e;
             }
