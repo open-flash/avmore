@@ -680,7 +680,7 @@ export class ExecutionContext implements ActionContext {
   }
 
   public initArray(array: ReadonlyArray<AvmValue>): AvmValue {
-    const result: AvmValue = this.construct(this.vm.realm.arrayClass, []);
+    const result: AvmValue = this.construct(this.vm.realm.array, []);
     this.setStringMember(result, "length", AvmValue.fromHostNumber(array.length));
     for (const [i, item] of array.entries()) {
       this.setStringMember(result, i.toString(10), item);
