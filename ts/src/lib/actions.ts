@@ -61,6 +61,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.Enumerate2:
       enumerate2(ctx);
       break;
+    case ActionType.Equals2:
+      equals2(ctx);
+      break;
     case ActionType.Increment:
       increment(ctx);
       break;
@@ -341,6 +344,12 @@ export function enumerate2(ctx: ActionContext): void {
   for (const key of keys) {
     ctx.push(key);
   }
+}
+
+export function equals2(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.equals(left, right));
 }
 
 export function instanceOf(ctx: ActionContext): void {

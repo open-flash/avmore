@@ -936,6 +936,20 @@ export class ExecutionContext implements ActionContext {
     return AVM_FALSE;
   }
 
+  // Implements the equals operation as defined in ECMA-262-3, section 11.9.1
+  // ("The Equals Operator ( == )")
+  public equals(left: AvmValue, right: AvmValue): AvmBoolean {
+    // > 1. Evaluate EqualityExpression.
+    // > 2. Call GetValue(Result(1)).
+    // `left` := `Result(2)`
+    // > 3. Evaluate RelationalExpression.
+    // > 4. Call GetValue(Result(3)).
+    // `right` := `Result(4)`
+    // > 5. Perform the comparison Result(4) == Result(2). (see 11.9.3).
+    // > 6. Return Result(5).
+    return AvmValue.fromHostBoolean(this.abstractEquals(left, right));
+  }
+
   // Implements the bitwise and operation as defined in ECMA-262-3, section 11.10
   public bitwiseAnd(left: AvmValue, right: AvmValue): AvmNumber {
     // 1. Evaluate A.
@@ -998,9 +1012,6 @@ export class ExecutionContext implements ActionContext {
       case ActionType.CallMethod:
         this.execCallMethod();
         break;
-      case ActionType.Equals2:
-        this.execEquals2();
-        break;
       case ActionType.GotoFrame:
         this.execGotoFrame(action);
         break;
@@ -1052,13 +1063,6 @@ export class ExecutionContext implements ActionContext {
     }
     const result: AvmValue = this.apply(method, obj, args);
     this.stack.push(result);
-  }
-
-  private execEquals2(): void {
-    const right: AvmValue = this.stack.pop();
-    const left: AvmValue = this.stack.pop();
-    const result: AvmBoolean = AvmValue.fromHostBoolean(this.abstractEquals(left, right));
-    this.push(result);
   }
 
   private execGotoFrame(action: GotoFrame): void {
@@ -1227,8 +1231,6 @@ export class ExecutionContext implements ActionContext {
     // | Bool      |       |      | Num(x) eq y | Num(x) eq Num(y) | eq               |     |
     // | Obj       |       |      |             |                  |                  | eq  |
 
-    // TODO: Treat `Function`, `Object` and `External` as the same type
-
     // 1. If Type(x) is different from Type(y), go to step 14.
     if (left.type === right.type) {
       switch (left.type) {
@@ -1257,7 +1259,8 @@ export class ExecutionContext implements ActionContext {
         // 13. Return true if x and y refer to the same object or if they refer to objects joined to each
         //     other (see 13.1.2). Otherwise, return false.
         case AvmValueType.Object:
-          // TODO: Check for joined objects
+          // We do not use joined objects so a simple reference test is enough to check for
+          // object equality.
           return left === right;
         default:
           throw new Error("Unexpected type");

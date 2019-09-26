@@ -69,6 +69,8 @@ export interface BaseContext {
 
   instanceof(left: AvmValue, right: AvmValue): AvmBoolean;
 
+  equals(left: AvmValue, right: AvmValue): AvmBoolean;
+
   bitwiseAnd(left: AvmValue, right: AvmValue): AvmNumber;
 
   bitwiseXor(left: AvmValue, right: AvmValue): AvmNumber;
