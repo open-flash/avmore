@@ -1,7 +1,7 @@
 import chai from "chai";
 import fs from "fs";
 import sysPath from "path";
-import { AVM_EMPTY_STRING, AVM_FALSE, AvmPropDescriptor, AvmSimpleObject } from "../lib/avm-value";
+import { AVM_EMPTY_STRING, AVM_FALSE, AvmPropDescriptor, AvmSimpleObject, AvmValue } from "../lib/avm-value";
 import { LoggedHost } from "../lib/host";
 import { TargetId, Vm } from "../lib/vm";
 import meta from "./meta.js";
@@ -38,6 +38,9 @@ describe("avm1", function () {
       const globalObject: AvmSimpleObject = vm.newObject();
       vm.realm.globals.set("_global", globalObject);
       vm.realm.globals.set("_root", globalObject);
+      vm.realm.globals.set("_lockroot", globalObject);
+      vm.realm.globals.set("_level", globalObject);
+      vm.realm.globals.set("_parent", globalObject);
       for (const [globalName, globalValue] of vm.realm.globals) {
         globalObject.ownProperties.set(globalName, AvmPropDescriptor.data(globalValue));
       }
@@ -67,12 +70,16 @@ describe("avm1", function () {
         globalObject.ownProperties.set("TextField", AvmPropDescriptor.data(textFieldObject));
         textFieldObject.ownProperties.set("StyleSheet", AvmPropDescriptor.data(vm.newObject()));
       }
+      globalObject.ownProperties.set("_alpha", AvmPropDescriptor.data(AvmValue.fromHostNumber(100)));
+      globalObject.ownProperties.set("blendMode", AvmPropDescriptor.data(AvmValue.fromHostString("normal")));
+      globalObject.ownProperties.set("cacheAsBitmap", AvmPropDescriptor.data(AVM_FALSE));
+      globalObject.ownProperties.set("_currentframe", AvmPropDescriptor.data(AvmValue.fromHostNumber(1)));
 
       const host: LoggedHost = new LoggedHost();
 
       const targetId: TargetId = host.createTarget(globalObject);
 
-      const scriptId: number = vm.createAvm1Script(inputBytes, targetId, null);
+      const scriptId: number = vm.createAvm1Script(inputBytes, targetId, globalObject);
       vm.runToCompletion(scriptId, host);
 
       const actualLogs: string = host.logs.map(msg => `${msg}\n`).join("");

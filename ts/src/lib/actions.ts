@@ -339,7 +339,12 @@ export function getProperty(ctx: ActionContext): void {
   if (key === undefined) {
     throw new Error(`InvalidPropertyIndex: ${keyIndex}`);
   }
-  ctx.push(ctx.getStringMember(target, key));
+  if (target.type === AvmValueType.String && target.value === "") {
+    // TODO: Check how to handle this case: `this`, `target`, `variable`?
+    ctx.push(ctx.getStringMember(ctx.getThis(), key));
+  } else {
+    ctx.push(ctx.getStringMember(target, key));
+  }
 }
 
 export function getUrl2(ctx: ActionContext, action: GetUrl2): void {
