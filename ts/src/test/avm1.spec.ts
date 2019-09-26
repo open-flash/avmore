@@ -1,7 +1,7 @@
 import chai from "chai";
 import fs from "fs";
 import sysPath from "path";
-import { AvmPropDescriptor, AvmSimpleObject } from "../lib/avm-value";
+import { AVM_EMPTY_STRING, AVM_FALSE, AvmPropDescriptor, AvmSimpleObject } from "../lib/avm-value";
 import { LoggedHost } from "../lib/host";
 import { TargetId, Vm } from "../lib/vm";
 import meta from "./meta.js";
@@ -52,7 +52,21 @@ describe("avm1", function () {
         flashPackage.ownProperties.set("Lib", AvmPropDescriptor.data(vm.newObject()));
       }
       globalObject.ownProperties.set("haxe", AvmPropDescriptor.data(vm.newObject()));
-      globalObject.ownProperties.set("Stage", AvmPropDescriptor.data(vm.newObject()));
+      globalObject.ownProperties.set("haxeInitDone", AvmPropDescriptor.data(AVM_FALSE));
+      {
+        const stageObject: AvmSimpleObject = vm.newObject();
+        globalObject.ownProperties.set("Stage", AvmPropDescriptor.data(stageObject));
+        stageObject.ownProperties.set("align", AvmPropDescriptor.data(AVM_EMPTY_STRING));
+      }
+      globalObject.ownProperties.set("MovieClip", AvmPropDescriptor.data(vm.newObject()));
+      globalObject.ownProperties.set("TextField", AvmPropDescriptor.data(vm.newObject()));
+      globalObject.ownProperties.set("TextFormat", AvmPropDescriptor.data(vm.newObject()));
+      globalObject.ownProperties.set("TextSnapshot", AvmPropDescriptor.data(vm.newObject()));
+      {
+        const textFieldObject: AvmSimpleObject = vm.newObject();
+        globalObject.ownProperties.set("TextField", AvmPropDescriptor.data(textFieldObject));
+        textFieldObject.ownProperties.set("StyleSheet", AvmPropDescriptor.data(vm.newObject()));
+      }
 
       const host: LoggedHost = new LoggedHost();
 
