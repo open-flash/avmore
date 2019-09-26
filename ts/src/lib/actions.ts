@@ -92,6 +92,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.Multiply:
       multiply(ctx);
       break;
+    case ActionType.NewMethod:
+      newMethod(ctx);
+      break;
     case ActionType.NewObject:
       newObject(ctx);
       break;
@@ -392,6 +395,23 @@ export function multiply(ctx: ActionContext): void {
   const right: AvmValue = ctx.pop();
   const left: AvmValue = ctx.pop();
   ctx.push(ctx.multiply(left, right));
+}
+
+export function newMethod(ctx: ActionContext): void {
+  const key: string = ctx.toHostString(ctx.pop());
+  const target: AvmValue = ctx.pop();
+  const argCount: Uint32 = ctx.toHostUint32(ctx.pop());
+  const args: AvmValue[] = [];
+  for (let i: UintSize = 0; i < argCount; i++) {
+    args.push(ctx.pop());
+  }
+
+  const fn: AvmValue = key !== ""
+    ? ctx.getStringMember(target, key)
+    : target;
+
+  const result: AvmValue = ctx.construct(fn, args);
+  ctx.push(result);
 }
 
 export function pop(ctx: ActionContext): void {
