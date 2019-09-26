@@ -10,7 +10,7 @@ import {
   AvmValue,
   AvmValueType,
 } from "./avm-value";
-import { AvmCallResult, CallableType, CallType, HostCallContext, HostCallHandler, HostFunction } from "./function";
+import { AvmCallResult, CallableType, CallType, HostCallContext, HostCallHandler } from "./function";
 
 export class Realm {
   public readonly objectClass: AvmObject;
@@ -51,7 +51,7 @@ export class Realm {
       class: "Function",
       prototype: funcProto,
       ownProperties: new Map(),
-      callable: undefined,
+      callable: {type: CallableType.Host, handler: objectConstructor},
     };
 
     // Function
@@ -81,7 +81,7 @@ export class Realm {
       class: "Function",
       prototype: funcProto,
       ownProperties: new Map(),
-      callable: undefined,
+      callable: {type: CallableType.Host, handler: arrayConstructor},
     };
 
     // String.prototype
@@ -101,18 +101,15 @@ export class Realm {
       class: "Function",
       prototype: funcProto,
       ownProperties: new Map(),
-      callable: undefined,
+      callable: {type: CallableType.Host, handler: stringConstructor},
     };
 
-    objectClass.callable = createObjectCall(objectClass, objectProto);
     objectClass.ownProperties.set("prototype", AvmPropDescriptor.data(objectProto));
     populateObjectProto(objectProto.ownProperties, funcProto);
 
-    arrayClass.callable = createArrayCall(arrayClass, arrayProto);
     arrayClass.ownProperties.set("prototype", AvmPropDescriptor.data(arrayProto));
     populateArrayProto(arrayProto.ownProperties, arrayClass, funcProto);
 
-    stringClass.callable = createStringCall(stringProto);
     stringClass.ownProperties.set("prototype", AvmPropDescriptor.data(stringProto));
     populateStringProto(stringProto.ownProperties, stringClass);
 
@@ -149,77 +146,73 @@ function bindingFromHostFunction(funcProto: AvmObject, handler: HostCallHandler)
 
 // > 15.2 Object Objects
 
-function createObjectCall(objectClass: AvmSimpleObject, objectProto: AvmSimpleObject): HostFunction {
-  return {type: CallableType.Host, handler};
+function objectConstructor(ctx: HostCallContext): AvmCallResult {
+  if (ctx.callType === CallType.Apply) {
+    // > 15.2.1 The Object Constructor Called as a Function
+    // >
+    // > When Object is called as a function rather than as a constructor, it performs a type
+    // > conversion.
 
-  function handler(ctx: HostCallContext): AvmCallResult {
-    if (ctx.callType === CallType.Apply) {
-      // > 15.2.1 The Object Constructor Called as a Function
-      // >
-      // > When Object is called as a function rather than as a constructor, it performs a type
-      // > conversion.
-
-      // > 15.2.1.1 Object ( [ value ] )
-      // >
-      // > When the Object function is called with no arguments or with one argument value, the
-      // > following steps are taken:
-      const value: AvmValue = ctx.getArg(0);
-      // > 1. If _value_ is `null`, `undefined` or not supplied, create and return a new Object
-      // > object exactly if the object constructor had been called with the same arguments
-      // > (15.2.2.1).
-      if (value.type === AvmValueType.Null || value.type === AvmValueType.Undefined) {
-        return ctx.construct(objectClass, ctx.args);
-      }
-      // 2. Return ToObject(value).
-      return ctx.toAvmObject(value);
-    } else {
-      // assert: callType === CallType.Construct
-
-      // > 15.2.2 The Object Constructor
-      // >
-      // > When `Object` is called as part of a `new` expression, it is a constructor that may
-      // > create an object.
-
-      // > 15.2.2.1 new Object ( [ value ] )
-      // >
-      // > When the `Object` constructor is called with no arguments or with one argument _value_,
-      // > the following steps are taken:
-      // > 1. If value is not supplied, go to step 8.
-      if (ctx.args.length >= 1) {
-        const value: AvmValue = ctx.args[0];
-        // > 2. If the type of value is not Object, go to step 5.
-        if (value.type === AvmValueType.Object) {
-          // > 3. If the value is a native ECMAScript object, do not create a new object but simply
-          // >    return value.
-          if (!value.external) {
-            return value;
-          }
-          // > 4. If the value is a host object, then actions are taken and a result is returned in
-          // >    an implementation-dependent manner that may depend on the host object.
-          // (No such case)
-        }
-
-        // 5. If the type of value is String, return ToObject(value).
-        // 6. If the type of value is Boolean, return ToObject(value).
-        // 7. If the type of value is Number, return ToObject(value).
-        throw new Error("NotImplemented: BoxablePrimitive");
-      }
-
-      // > 8. (The argument value was not supplied or its type was Null or Undefined.)
-      // >    Create a new native ECMAScript object.
-      // >    The [[Prototype]] property of the newly constructed object is set to the Object
-      // >    prototype object.
-      // >    The [[Class]] property of the newly constructed object is set to "Object".
-      // >    The newly constructed object has no [[Value]] property.
-      // >    Return the newly created native object.
-      return {
-        type: AvmValueType.Object,
-        external: false,
-        class: "Object",
-        prototype: objectProto,
-        ownProperties: new Map(),
-      };
+    // > 15.2.1.1 Object ( [ value ] )
+    // >
+    // > When the Object function is called with no arguments or with one argument value, the
+    // > following steps are taken:
+    const value: AvmValue = ctx.getArg(0);
+    // > 1. If _value_ is `null`, `undefined` or not supplied, create and return a new Object
+    // > object exactly if the object constructor had been called with the same arguments
+    // > (15.2.2.1).
+    if (value.type === AvmValueType.Null || value.type === AvmValueType.Undefined) {
+      return ctx.construct(ctx.getRealm().objectClass, ctx.args);
     }
+    // 2. Return ToObject(value).
+    return ctx.toAvmObject(value);
+  } else {
+    // assert: callType === CallType.Construct
+
+    // > 15.2.2 The Object Constructor
+    // >
+    // > When `Object` is called as part of a `new` expression, it is a constructor that may
+    // > create an object.
+
+    // > 15.2.2.1 new Object ( [ value ] )
+    // >
+    // > When the `Object` constructor is called with no arguments or with one argument _value_,
+    // > the following steps are taken:
+    // > 1. If value is not supplied, go to step 8.
+    if (ctx.args.length >= 1) {
+      const value: AvmValue = ctx.args[0];
+      // > 2. If the type of value is not Object, go to step 5.
+      if (value.type === AvmValueType.Object) {
+        // > 3. If the value is a native ECMAScript object, do not create a new object but simply
+        // >    return value.
+        if (!value.external) {
+          return value;
+        }
+        // > 4. If the value is a host object, then actions are taken and a result is returned in
+        // >    an implementation-dependent manner that may depend on the host object.
+        // (No such case)
+      }
+
+      // 5. If the type of value is String, return ToObject(value).
+      // 6. If the type of value is Boolean, return ToObject(value).
+      // 7. If the type of value is Number, return ToObject(value).
+      throw new Error("NotImplemented: BoxablePrimitive");
+    }
+
+    // > 8. (The argument value was not supplied or its type was Null or Undefined.)
+    // >    Create a new native ECMAScript object.
+    // >    The [[Prototype]] property of the newly constructed object is set to the Object
+    // >    prototype object.
+    // >    The [[Class]] property of the newly constructed object is set to "Object".
+    // >    The newly constructed object has no [[Value]] property.
+    // >    Return the newly created native object.
+    return {
+      type: AvmValueType.Object,
+      external: false,
+      class: "Object",
+      prototype: ctx.getRealm().objectProto,
+      ownProperties: new Map(),
+    };
   }
 }
 
@@ -258,95 +251,91 @@ function populateObjectProto(
 // > constraint applies only to properties of the Array object itself and is unaffected by length or array index
 // > properties that may be inherited from its prototype.
 
-function createArrayCall(arrayClass: AvmSimpleObject, arrayProto: AvmSimpleObject): HostFunction {
-  return {type: CallableType.Host, handler};
+function arrayConstructor(ctx: HostCallContext): AvmCallResult {
+  // > 15.4.1 The Array Constructor Called as a Function
+  // >
+  // > When `Array` is called as a function rather than as a constructor, it creates and
+  // > initialises a new Array object. Thus the function call `Array(...)` is equivalent to the
+  // > object creation expression `new Array(...)` with the same arguments.
 
-  function handler(ctx: HostCallContext): AvmCallResult {
-    // > 15.4.1 The Array Constructor Called as a Function
-    // >
-    // > When `Array` is called as a function rather than as a constructor, it creates and
-    // > initialises a new Array object. Thus the function call `Array(...)` is equivalent to the
-    // > object creation expression `new Array(...)` with the same arguments.
-
-    // > 15.4.1.1  Array ( [ item1 [ , item2 [ , ... ] ] ] )
-    // >
-    // > When the `Array` function is called the following steps are taken:
-    // > 1. Create and return a new Array object exactly as if the array constructor had been called
-    // >    with the same arguments (15.4.2).
-    if (ctx.callType === CallType.Apply) {
-      return ctx.construct(arrayClass, ctx.args);
-    }
-
-    // > 15.4.2 The Array Constructor
-    // >
-    // > When `Array` is called as part of a new expression, it is a constructor: it initialises the
-    // > newly created object.
-
-    // assert: callType === CallType.Construct
-
-    if (ctx.thisArg.external) {
-      // This may happen due to inheritance
-      throw new Error("NotImplemented: new Array() on external object");
-    }
-
-    if (ctx.args.length !== 1) {
-      // > 15.4.2.1 new Array ( [ item0 [ , item1 [ , ... ] ] ] )
-      // >
-      // > This description applies if and only if the Array constructor is given no arguments or at
-      // > least two arguments.
-
-      // > The [[Prototype]] property of the newly constructed object is set to the original Array
-      // > prototype object, the one that is the initial value of `Array.prototype` (15.4.3.1).
-
-      // This resets the prototype
-      // TODO: check how it interacts with inheritance
-      ctx.thisArg.prototype = arrayProto;
-
-      // > The [[Class]] property of the newly constructed object is set to `"Array"`.
-      ctx.thisArg.class = "Array";
-
-      // > The `length` property of the newly constructed object is set to the number of arguments.
-      ctx.setStringMember(ctx.thisArg, "length", AvmValue.fromHostNumber(ctx.args.length));
-
-      // > The `0` property of the newly constructed object is set to _item0_ (if supplied); the `1`
-      // > property of the newly constructed object is set to _item1_ (if supplied); and, in
-      // > general, for as many arguments as there are, the _k_ property of the newly constructed
-      // > object is set to argument _k_, where the first argument is considered to be argument
-      // > number `0`.
-      for (const [i, item] of ctx.args.entries()) {
-        ctx.setStringMember(ctx.thisArg, i.toString(10), item);
-      }
-    } else {
-      // assert ctx.args.length === 1
-      const len: AvmValue = ctx.args[0];
-
-      // > 15.4.2.2 new Array (len)
-      // >
-      // > The [[Prototype]] property of the newly constructed object is set to the original Array
-      // > prototype object, the one that is the initial value of `Array.prototype` (15.4.3.1). The
-      // > [[Class]] property of the newly constructed object is set to `"Array"`.
-      ctx.thisArg.prototype = arrayProto;
-      ctx.thisArg.class = "Array";
-
-      if (len.type === AvmValueType.Number) {
-        // > If the argument _len_ is a Number and ToUint32(_len_) is equal to _len_, then the
-        // > `length` property of the newly constructed object is set to ToUint32(_len_). If the
-        // > argument _len_ is a Number and ToUint32(_len_) is not equal to _len_, a `RangeError`
-        // > exception is thrown.
-
-        // TODO: Check if `ToUint32(len) === len`
-        ctx.setStringMember(ctx.thisArg, "length", len);
-      } else {
-        // > If the argument len is not a Number, then the `length` property of the newly
-        // > constructed object is set to `1` and the `0` property of the newly constructed object
-        // > is set to `len`.
-        ctx.setStringMember(ctx.thisArg, "length", AVM_ONE);
-        ctx.setStringMember(ctx.thisArg, "0", len);
-      }
-    }
-
-    return ctx.thisArg;
+  // > 15.4.1.1  Array ( [ item1 [ , item2 [ , ... ] ] ] )
+  // >
+  // > When the `Array` function is called the following steps are taken:
+  // > 1. Create and return a new Array object exactly as if the array constructor had been called
+  // >    with the same arguments (15.4.2).
+  if (ctx.callType === CallType.Apply) {
+    return ctx.construct(ctx.getRealm().arrayClass, ctx.args);
   }
+
+  // > 15.4.2 The Array Constructor
+  // >
+  // > When `Array` is called as part of a new expression, it is a constructor: it initialises the
+  // > newly created object.
+
+  // assert: callType === CallType.Construct
+
+  if (ctx.thisArg.external) {
+    // This may happen due to inheritance
+    throw new Error("NotImplemented: new Array() on external object");
+  }
+
+  if (ctx.args.length !== 1) {
+    // > 15.4.2.1 new Array ( [ item0 [ , item1 [ , ... ] ] ] )
+    // >
+    // > This description applies if and only if the Array constructor is given no arguments or at
+    // > least two arguments.
+
+    // > The [[Prototype]] property of the newly constructed object is set to the original Array
+    // > prototype object, the one that is the initial value of `Array.prototype` (15.4.3.1).
+
+    // This resets the prototype
+    // TODO: check how it interacts with inheritance
+    ctx.thisArg.prototype = ctx.getRealm().arrayProto;
+
+    // > The [[Class]] property of the newly constructed object is set to `"Array"`.
+    ctx.thisArg.class = "Array";
+
+    // > The `length` property of the newly constructed object is set to the number of arguments.
+    ctx.setStringMember(ctx.thisArg, "length", AvmValue.fromHostNumber(ctx.args.length));
+
+    // > The `0` property of the newly constructed object is set to _item0_ (if supplied); the `1`
+    // > property of the newly constructed object is set to _item1_ (if supplied); and, in
+    // > general, for as many arguments as there are, the _k_ property of the newly constructed
+    // > object is set to argument _k_, where the first argument is considered to be argument
+    // > number `0`.
+    for (const [i, item] of ctx.args.entries()) {
+      ctx.setStringMember(ctx.thisArg, i.toString(10), item);
+    }
+  } else {
+    // assert ctx.args.length === 1
+    const len: AvmValue = ctx.args[0];
+
+    // > 15.4.2.2 new Array (len)
+    // >
+    // > The [[Prototype]] property of the newly constructed object is set to the original Array
+    // > prototype object, the one that is the initial value of `Array.prototype` (15.4.3.1). The
+    // > [[Class]] property of the newly constructed object is set to `"Array"`.
+    ctx.thisArg.prototype = ctx.getRealm().arrayProto;
+    ctx.thisArg.class = "Array";
+
+    if (len.type === AvmValueType.Number) {
+      // > If the argument _len_ is a Number and ToUint32(_len_) is equal to _len_, then the
+      // > `length` property of the newly constructed object is set to ToUint32(_len_). If the
+      // > argument _len_ is a Number and ToUint32(_len_) is not equal to _len_, a `RangeError`
+      // > exception is thrown.
+
+      // TODO: Check if `ToUint32(len) === len`
+      ctx.setStringMember(ctx.thisArg, "length", len);
+    } else {
+      // > If the argument len is not a Number, then the `length` property of the newly
+      // > constructed object is set to `1` and the `0` property of the newly constructed object
+      // > is set to `len`.
+      ctx.setStringMember(ctx.thisArg, "length", AVM_ONE);
+      ctx.setStringMember(ctx.thisArg, "0", len);
+    }
+  }
+
+  return ctx.thisArg;
 }
 
 function populateArrayProto(
@@ -427,55 +416,51 @@ function populateArrayProto(
 
 // > 15.5 String Objects
 
-function createStringCall(stringProto: AvmSimpleObject): HostFunction {
-  return {type: CallableType.Host, handler};
+function stringConstructor(ctx: HostCallContext): AvmCallResult {
+  // > 15.5.1 The String Constructor Called as a Function
+  // >
+  // > When `String` is called as a function rather than as a constructor, it performs a type
+  // > conversion.
 
-  function handler(ctx: HostCallContext): AvmCallResult {
-    // > 15.5.1 The String Constructor Called as a Function
-    // >
-    // > When `String` is called as a function rather than as a constructor, it performs a type
-    // > conversion.
-
-    // > 15.5.1.1 String ( [ value ] )
-    // >
-    // > Returns a string value (not a String object) computed by ToString(_value_). If _value_ is
-    // > not supplied, the empty string `""` is returned.
-    if (ctx.callType === CallType.Apply) {
-      return ctx.args.length > 0
-        ? ctx.toAvmString(ctx.args[0])
-        : AVM_EMPTY_STRING;
-    }
-
-    // assert: callType === CallType.Construct
-
-    if (ctx.thisArg.external) {
-      // This may happen due to inheritance
-      throw new Error("NotImplemented: new String() on external object");
-    }
-
-    // > 15.5.2 The String Constructor
-    // >
-    // > When `String` is called as part of a `new` expression, it is a constructor: it initialises
-    // > the newly created object.
-
-    // > 15.5.2.1 new String ( [ value ] )
-    // >
-    // > The [[Prototype]] property of the newly constructed object is set to the original String
-    // > prototype object, the one that is the initial value of `String.prototype` (15.5.3.1).
-    // TODO: check how it interacts with inheritance
-    ctx.thisArg.prototype = stringProto;
-
-    // > The [[Class]] property of the newly constructed object is set to `"String"`.
-    ctx.thisArg.class = "String";
-
-    // > The [[Value]] property of the newly constructed object is set to ToString(_value_), or to
-    // > the empty string if value is not supplied.
-    ctx.thisArg.value = ctx.args.length > 0
-      ? ctx.toHostString(ctx.args[0])
-      : "";
-
-    return ctx.thisArg;
+  // > 15.5.1.1 String ( [ value ] )
+  // >
+  // > Returns a string value (not a String object) computed by ToString(_value_). If _value_ is
+  // > not supplied, the empty string `""` is returned.
+  if (ctx.callType === CallType.Apply) {
+    return ctx.args.length > 0
+      ? ctx.toAvmString(ctx.args[0])
+      : AVM_EMPTY_STRING;
   }
+
+  // assert: callType === CallType.Construct
+
+  if (ctx.thisArg.external) {
+    // This may happen due to inheritance
+    throw new Error("NotImplemented: new String() on external object");
+  }
+
+  // > 15.5.2 The String Constructor
+  // >
+  // > When `String` is called as part of a `new` expression, it is a constructor: it initialises
+  // > the newly created object.
+
+  // > 15.5.2.1 new String ( [ value ] )
+  // >
+  // > The [[Prototype]] property of the newly constructed object is set to the original String
+  // > prototype object, the one that is the initial value of `String.prototype` (15.5.3.1).
+  // TODO: check how it interacts with inheritance
+  ctx.thisArg.prototype = ctx.getRealm().stringProto;
+
+  // > The [[Class]] property of the newly constructed object is set to `"String"`.
+  ctx.thisArg.class = "String";
+
+  // > The [[Value]] property of the newly constructed object is set to ToString(_value_), or to
+  // > the empty string if value is not supplied.
+  ctx.thisArg.value = ctx.args.length > 0
+    ? ctx.toHostString(ctx.args[0])
+    : "";
+
+  return ctx.thisArg;
 }
 
 // ASnative
