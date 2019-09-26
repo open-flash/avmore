@@ -816,6 +816,42 @@ export class ExecutionContext implements ActionContext {
     this.registers.set(regId, value);
   }
 
+  // Implements the typeoff operation as defined in ECMA-262-3, section 11.4.3
+  // ("The Subtraction Operator ( - )")
+  public typeOf(value: AvmValue): AvmString {
+    // 1. Evaluate UnaryExpression.
+    // 2. If Type(Result(1)) is not Reference, go to step 4.
+    // 3. If GetBase(Result(1)) is null, return "undefined".
+    // 4. Call GetValue(Result(1)).
+    // `value` := `Result(4)`
+    // 5. Return a string determined by Type(Result(4)) according to the following table:
+    switch (value.type) {
+      case AvmValueType.Boolean:
+        return AvmValue.fromHostString("boolean");
+      case AvmValueType.Null:
+        return AvmValue.fromHostString("object");
+      case AvmValueType.Number:
+        return AvmValue.fromHostString("number");
+      case AvmValueType.Object: {
+        if (value.external) {
+          throw new Error("NotImplemented: TypeOf for external object");
+        } else {
+          if (value.callable !== undefined) {
+            return AvmValue.fromHostString("function");
+          } else {
+            return AvmValue.fromHostString("object");
+          }
+        }
+      }
+      case AvmValueType.String:
+        return AvmValue.fromHostString("string");
+      case AvmValueType.Undefined:
+        return AvmValue.fromHostString("undefined");
+      default:
+        throw new Error(`UnexpectedAvmValueType: ${value}`);
+    }
+  }
+
   // Implements the multiply operation as defined in ECMA-262-3, section 11.5.1
   // ("Applying the * Operator")
   public multiply(left: AvmValue, right: AvmValue): AvmNumber {

@@ -116,6 +116,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.Subtract:
       subtract(ctx);
       break;
+    case ActionType.TypeOf:
+      typeOf(ctx);
+      break;
     default:
       console.error(action);
       throw new Error(`UnknownAction: ${action.action} (${ActionType[action.action]})`);
@@ -477,4 +480,9 @@ export function subtract(ctx: ActionContext): void {
   const right: AvmValue = ctx.pop();
   const left: AvmValue = ctx.pop();
   ctx.push(ctx.subtract(left, right));
+}
+
+export function typeOf(ctx: ActionContext): void {
+  const value: AvmValue = ctx.pop();
+  ctx.push(ctx.typeOf(value));
 }

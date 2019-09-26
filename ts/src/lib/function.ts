@@ -214,6 +214,10 @@ class HostCallContextImpl implements BaseHostCallContext {
     return this.ctx.initArray(array);
   }
 
+  typeOf(value: AvmValue): AvmString {
+    return this.ctx.typeOf(value);
+  }
+
   multiply(left: AvmValue, right: AvmValue): AvmNumber {
     return this.ctx.multiply(left, right);
   }

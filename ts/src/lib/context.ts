@@ -52,6 +52,8 @@ export interface BaseContext {
 
   // Operators
 
+  typeOf(value: AvmValue): AvmString;
+
   multiply(left: AvmValue, right: AvmValue): AvmNumber;
 
   divide(left: AvmValue, right: AvmValue): AvmNumber;
