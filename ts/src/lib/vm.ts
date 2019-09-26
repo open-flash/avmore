@@ -31,7 +31,7 @@ import {
   AvmValueType,
 } from "./avm-value";
 import { AvmConstantPool } from "./constant-pool";
-import { ActionContext, RunBudget } from "./context";
+import { ActionContext, RunBudget, StackContext } from "./context";
 import { ReferenceToUndeclaredVariableWarning, TargetHasNoPropertyWarning } from "./error";
 import {
   AvmCallResult,
@@ -234,6 +234,9 @@ export class ExecutionContext implements ActionContext {
   private target: TargetId | null;
   private readonly thisArg: AvmObject | AvmUndefined;
 
+  // Internal
+  private missingPropertyDetector: MissingPropertyDetector;
+
   constructor(
     vm: Vm,
     host: Host,
@@ -254,6 +257,7 @@ export class ExecutionContext implements ActionContext {
     this.registers = registers;
     this.target = target;
     this.thisArg = thisArg;
+    this.missingPropertyDetector = new MissingPropertyDetector();
   }
 
   public static runScript(vm: Vm, host: Host, budget: RunBudget, script: Avm1Script): void {
@@ -298,9 +302,9 @@ export class ExecutionContext implements ActionContext {
     }
     let block: CfgBlock = cfgTable.entryBlock;
     while (this.budget.totalActions < this.budget.maxActions) {
-      if (this.budget.totalActions >= this.budget.maxActions) {
-      }
+      this.missingPropertyDetector.beforeSimpleActions();
       for (const [i, action] of block.actions.entries()) {
+        this.missingPropertyDetector.beforeSimpleAction(this, action);
         try {
           this.exec(action);
         } catch (e) {
@@ -312,7 +316,9 @@ export class ExecutionContext implements ActionContext {
           }
         }
         this.budget.totalActions++;
+        this.missingPropertyDetector.afterSimpleAction(this, action);
       }
+      this.missingPropertyDetector.afterSimpleActions();
       let flowResult: FlowResult;
       switch (block.type) {
         case CfgBlockType.Error:
@@ -503,7 +509,10 @@ export class ExecutionContext implements ActionContext {
     if (value !== undefined) {
       return value;
     }
-    this.host.warn(new TargetHasNoPropertyWarning("foo", key));
+    const targetName: string | undefined = this.missingPropertyDetector.getVarName();
+    if (targetName !== undefined) {
+      this.host.warn(new TargetHasNoPropertyWarning(targetName, key));
+    }
     return AVM_UNDEFINED;
   }
 
@@ -1519,5 +1528,91 @@ export class ExecutionContext implements ActionContext {
         throw new Error(`UnexpectedFlowResultType: ${flowResult}`);
       }
     }
+  }
+}
+
+/**
+ * Retrieve the variable name for `TargetHasNoPropertyWarning`
+ *
+ * This is implemented by simply recognizing the sequence
+ * `getVariable push* getMember`.
+ *
+ * This is very naive and could be improved.
+ */
+class MissingPropertyDetector {
+  private varName: string | undefined;
+  private getMemberSeen: boolean;
+
+  constructor() {
+    this.varName = undefined;
+    this.getMemberSeen = true;
+  }
+
+  public beforeSimpleActions(): void {
+    this.reset();
+  }
+
+  public beforeSimpleAction(ctx: StackContext, action: CfgAction): void {
+    switch (action.action) {
+      case ActionType.GetVariable: {
+        const name: AvmValue = ctx.peek();
+        if (name.type === AvmValueType.String) {
+          this.varName = name.value;
+        } else {
+          this.reset();
+        }
+        break;
+      }
+      case ActionType.GetMember: {
+        if (this.varName !== undefined) {
+          if (this.getMemberSeen) {
+            this.reset();
+          } else {
+            this.getMemberSeen = true;
+          }
+        }
+        break;
+      }
+      case ActionType.Push: {
+        // Don't reset or update varName on push
+        break;
+      }
+      default: {
+        this.reset();
+        break;
+      }
+    }
+  }
+
+  public afterSimpleAction(ctx: StackContext, action: CfgAction): void {
+    if (action.action === ActionType.GetVariable) {
+      // Reset if the variable is actually a primitive
+      const varValue: AvmValue = ctx.peek();
+      // tslint:disable:prefer-switch
+      if (
+        varValue.type === AvmValueType.Boolean
+        || varValue.type === AvmValueType.Number
+        || varValue.type === AvmValueType.String
+      ) {
+        this.reset();
+      }
+    }
+  }
+
+  public afterSimpleActions(): void {
+    this.reset();
+  }
+
+  public getVarName(): string | undefined {
+    if (this.varName !== undefined && this.getMemberSeen) {
+      return this.varName;
+    } else {
+      return undefined;
+    }
+  }
+
+  private reset(): void {
+    this.varName = undefined;
+    this.getMemberSeen = false;
   }
 }
