@@ -545,11 +545,15 @@ export class ExecutionContext implements ActionContext {
   }
 
   public setStringMember(target: AvmValue, key: string, value: AvmValue): void {
-    const targetObj: AvmObject = this.toAvmObject(target);
-    if (targetObj.external) {
-      targetObj.handler.set(key, value);
+    if (target.type === AvmValueType.Undefined || target.type === AvmValueType.Null) {
+      // Early return to avoid TypeError
+      return undefined;
+    }
+    const obj: AvmObject = this.toAvmObject(target);
+    if (obj.external) {
+      obj.handler.set(key, value);
     } else {
-      targetObj.ownProperties.set(key, AvmPropDescriptor.data(value));
+      obj.ownProperties.set(key, AvmPropDescriptor.data(value));
     }
   }
 
