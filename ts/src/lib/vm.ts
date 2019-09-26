@@ -92,6 +92,8 @@ export class Vm {
     } catch (e) {
       if (e instanceof AbortSignal) {
         return;
+      } else if (e instanceof AvmThrowSignal) {
+        throw new Incident("UnhandledAvmException", {value: e.value});
       } else {
         throw e;
       }
@@ -212,7 +214,8 @@ interface FlowReturn {
 
 export type FlowResult = FlowReturn | FlowSimple;
 
-abstract class Signal {}
+abstract class Signal {
+}
 
 // Wrapper for catchable AVM1 errors.
 class AvmThrowSignal extends Signal {
