@@ -1360,9 +1360,19 @@ export class ExecutionContext implements ActionContext {
       target,
     );
 
-    ctx.runCfg(callable.body);
-
-    // TODO: Handle return values
-    return AVM_UNDEFINED;
+    const flowResult: FlowResult = ctx.runCfg(callable.body);
+    switch (flowResult.type) {
+      case FlowResultType.Return: {
+        // TODO: Improve return logic for constructors?
+        return flowResult.value;
+      }
+      case FlowResultType.Simple: {
+        // TODO: Assert null target
+        return AVM_UNDEFINED;
+      }
+      default: {
+        throw new Error(`UnexpectedFlowResultType: ${flowResult}`);
+      }
+    }
   }
 }

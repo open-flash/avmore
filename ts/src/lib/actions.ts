@@ -162,10 +162,11 @@ export function bitXor(ctx: ActionContext): void {
 
 export function callFunction(ctx: ActionContext): void {
   const fnName: string = ctx.toHostString(ctx.pop());
-  const argCount: number = ctx.toHostNumber(ctx.pop());
+  const argCount: Uint32 = ctx.toHostUint32(ctx.pop());
 
-  if (argCount !== 0) {
-    throw new Error("NotImplemented: CallFunction with arguments");
+  const args: AvmValue[] = [];
+  for (let i: UintSize = 0; i < argCount; i++) {
+    args.push(ctx.pop());
   }
   const fn: AvmValue = ctx.getVar(fnName);
 
@@ -412,7 +413,7 @@ export function push(ctx: ActionContext, action: Push): void {
 
 export function newObject(ctx: ActionContext): void {
   const fnName: string = ctx.toHostString(ctx.pop());
-  const argCount: number = ctx.toHostNumber(ctx.pop());
+  const argCount: Uint32 = ctx.toHostUint32(ctx.pop());
 
   const args: AvmValue[] = [];
   for (let i: UintSize = 0; i < argCount; i++) {
