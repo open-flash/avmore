@@ -416,8 +416,9 @@ export class ExecutionContext implements ActionContext {
       if (callable === undefined) {
         throw new Error("CannotApplyNonCallableObject");
       }
+      // TODO: It seems that `undefined` and `null` mean that thisArg should use the global value
       if (thisArg.type !== AvmValueType.Object && thisArg.type !== AvmValueType.Undefined) {
-        throw new Error("NotImplemented: NonObjectThisArg");
+        thisArg = this.toAvmObject(thisArg);
       }
       return this.call(callable, CallType.Apply, thisArg, args);
     }
@@ -507,13 +508,12 @@ export class ExecutionContext implements ActionContext {
   }
 
   // Implements `GetValue` and `[[Get]]`
-  public tryGetStringMember(obj: AvmValue, key: string): AvmValue | undefined {
-    if (obj.type !== AvmValueType.Object) {
-      if (obj.type === AvmValueType.Undefined) {
-        return undefined;
-      }
-      throw new Error("NotImplemented: ReferenceError on non-object property access");
+  public tryGetStringMember(target: AvmValue, key: string): AvmValue | undefined {
+    if (target.type === AvmValueType.Undefined || target.type === AvmValueType.Null) {
+      // Early return to avoid TypeError
+      return undefined;
     }
+    const obj: AvmObject = this.toAvmObject(target);
     if (obj.external) {
       return obj.handler.get(key);
     }
@@ -545,7 +545,8 @@ export class ExecutionContext implements ActionContext {
 
   public getOwnKeys(obj: AvmValue): AvmString[] {
     if (obj.type !== AvmValueType.Object) {
-      throw new Error("NotImplemented: ReferenceError on non-object getKeys access");
+      return [];
+      // throw new Error("NotImplemented: ReferenceError on non-object getKeys access");
     }
     if (obj.external) {
       return obj.handler.ownKeys();
@@ -598,17 +599,16 @@ export class ExecutionContext implements ActionContext {
     }
   }
 
-  public createBooleanBox(_value: boolean): AvmObject {
-    throw new Error("NotImplemented: createBooleanBox");
-    // return {
-    //   type: AvmValueType.Object,
-    //   external: false,
-    //   prototype: this.getRealm().booleanPrototype,
-    //   class: "String",
-    //   ownProperties: new Map(),
-    //   value,
-    //   callable: undefined,
-    // };
+  public createBooleanBox(value: boolean): AvmObject {
+    return {
+      type: AvmValueType.Object,
+      external: false,
+      prototype: this.getRealm().booleanPrototype,
+      class: "String",
+      ownProperties: new Map(),
+      value,
+      callable: undefined,
+    };
   }
 
   public createNumberBox(value: number): AvmObject {

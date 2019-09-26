@@ -73,5 +73,5 @@ export function numberPrototypeToString(_ctx: HostCallContext): AvmValue {
 }
 
 export function numberPrototypeValueOf(_ctx: HostCallContext): AvmValue {
-  throw new Error("NotImplemented: Number.protototype.toString()");
+  throw new Error("NotImplemented: Number.protototype.valueOf()");
 }

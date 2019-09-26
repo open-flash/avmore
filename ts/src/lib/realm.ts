@@ -10,11 +10,12 @@ import {
 } from "./avm-value";
 import { AvmCallResult, CallableType, CallType, HostCallContext, HostCallHandler } from "./function";
 import { ArrayRealm, createArrayRealm } from "./realm/array";
+import { BooleanRealm, createBooleanRealm } from "./realm/boolean";
 import { createMathRealm, MathRealm } from "./realm/math";
 import { createNumberRealm, NumberRealm } from "./realm/number";
 import { createStringRealm, StringRealm } from "./realm/string";
 
-export interface Realm extends ArrayRealm, MathRealm, NumberRealm, StringRealm {
+export interface Realm extends ArrayRealm, BooleanRealm, MathRealm, NumberRealm, StringRealm {
   objectClass: AvmObject;
   objectProto: AvmObject;
   funcClass: AvmObject;
@@ -68,12 +69,14 @@ export function createRealm(): Realm {
   populateObjectProto(objectProto.ownProperties, funcProto);
 
   const arrayRealm: ArrayRealm = createArrayRealm(funcProto);
+  const booleanRealm: BooleanRealm = createBooleanRealm(funcProto);
   const mathRealm: MathRealm = createMathRealm(funcProto, objectProto);
   const numberRealm: NumberRealm = createNumberRealm(funcProto);
   const stringRealm: StringRealm = createStringRealm(funcProto);
 
   const globals: Map<string, AvmValue> = new Map([
     ["Array", arrayRealm.array],
+    ["Boolean", booleanRealm.boolean],
     ["Math", mathRealm.math],
     ["Number", numberRealm.number],
     ["Object", objectClass],
@@ -91,6 +94,7 @@ export function createRealm(): Realm {
     funcProto,
     globals,
     ...arrayRealm,
+    ...booleanRealm,
     ...mathRealm,
     ...numberRealm,
     ...stringRealm,
