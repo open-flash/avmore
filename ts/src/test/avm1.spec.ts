@@ -3,7 +3,7 @@ import fs from "fs";
 import sysPath from "path";
 import { AvmPropDescriptor, AvmSimpleObject } from "../lib/avm-value";
 import { LoggedHost } from "../lib/host";
-import { Vm } from "../lib/vm";
+import { TargetId, Vm } from "../lib/vm";
 import meta from "./meta.js";
 import { readFile, readTextFile } from "./utils";
 
@@ -48,12 +48,16 @@ describe("avm1", function () {
         flashPackage.ownProperties.set("filters", AvmPropDescriptor.data(vm.newObject()));
         flashPackage.ownProperties.set("geom", AvmPropDescriptor.data(vm.newObject()));
         flashPackage.ownProperties.set("text", AvmPropDescriptor.data(vm.newObject()));
+        flashPackage.ownProperties.set("Lib", AvmPropDescriptor.data(vm.newObject()));
       }
       globalObject.ownProperties.set("haxe", AvmPropDescriptor.data(vm.newObject()));
+      globalObject.ownProperties.set("Stage", AvmPropDescriptor.data(vm.newObject()));
 
       const host: LoggedHost = new LoggedHost();
 
-      const scriptId: number = vm.createAvm1Script(inputBytes, null, null);
+      const targetId: TargetId = host.createTarget(globalObject);
+
+      const scriptId: number = vm.createAvm1Script(inputBytes, targetId, null);
       vm.runToCompletion(scriptId, host);
 
       const actualLogs: string = host.logs.map(msg => `${msg}\n`).join("");

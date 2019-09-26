@@ -1,6 +1,7 @@
 import { Uint32, UintSize } from "semantic-types";
 import { AvmBoolean, AvmNumber, AvmObject, AvmSimpleObject, AvmString, AvmUndefined, AvmValue } from "./avm-value";
 import { AvmCallResult, AvmFunctionParameter, ParameterState } from "./function";
+import { Realm } from "./realm";
 import { CfgTable } from "./script";
 
 export interface RunBudget {
@@ -76,6 +77,12 @@ export interface BaseContext {
   bitwiseXor(left: AvmValue, right: AvmValue): AvmNumber;
 
   bitwiseOr(left: AvmValue, right: AvmValue): AvmNumber;
+
+  // Misc
+
+  getRealm(): Realm;
+
+  getThis(): AvmObject | AvmUndefined;
 }
 
 export interface ScopeContext {

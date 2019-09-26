@@ -1,4 +1,5 @@
 import { UintSize } from "semantic-types";
+import { AvmObject, AvmUndefined } from "./avm-value";
 import { TargetId } from "./vm";
 
 export interface Host {
@@ -10,13 +11,16 @@ export interface Host {
 }
 
 export interface Target {
+  // `this` value to use for the scripts executed with this target
+  getThis(): AvmObject | AvmUndefined;
+
   stop(): void;
 
   play(): void;
 
   gotoFrame(frameIndex: UintSize): void;
 
-  getFrameLoadingProgress(): {loaded: UintSize; total: UintSize};
+  getFrameLoadingProgress(): { loaded: UintSize; total: UintSize };
 }
 
 export class NativeHost implements Host {
@@ -47,9 +51,11 @@ export class NoopHost implements Host {
 
 export class LoggedHost implements Host {
   public readonly logs: string[];
+  public readonly targets: Map<UintSize, LoggedTarget>;
 
   constructor() {
     this.logs = [];
+    this.targets = new Map();
   }
 
   trace(message: string): void {
@@ -60,7 +66,44 @@ export class LoggedHost implements Host {
     this.logs.push(String(error));
   }
 
-  getTarget(): undefined {
-    return;
+  getTarget(targetId: TargetId): LoggedTarget | undefined {
+    return this.targets.get(targetId);
+  }
+
+  createTarget(thisArg: AvmObject | AvmUndefined): TargetId {
+    const id: TargetId = this.targets.size;
+    this.targets.set(id, new LoggedTarget(thisArg));
+    return id;
+  }
+}
+
+export class LoggedTarget implements Target {
+  public readonly logs: string[];
+  public readonly thisArg: AvmObject | AvmUndefined;
+
+  constructor(thisArg: AvmObject | AvmUndefined) {
+    this.logs = [];
+    this.thisArg = thisArg;
+  }
+
+  // `this` value to use for the scripts executed with this target
+  getThis(): AvmObject | AvmUndefined {
+    return this.thisArg;
+  }
+
+  stop(): void {
+    this.logs.push("stop");
+  }
+
+  play(): void {
+    this.logs.push("play");
+  }
+
+  gotoFrame(frameIndex: UintSize): void {
+    this.logs.push(`gotoFrame: ${frameIndex}`);
+  }
+
+  getFrameLoadingProgress(): { loaded: UintSize; total: UintSize } {
+    return {loaded: 1, total: 4};
   }
 }

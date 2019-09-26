@@ -10,6 +10,7 @@ import {
   AvmValueType,
 } from "./avm-value";
 import { BaseContext } from "./context";
+import { Realm } from "./realm";
 import { Scope } from "./scope";
 import { Avm1Script, CfgTable } from "./script";
 
@@ -263,6 +264,14 @@ class HostCallContextImpl implements BaseHostCallContext {
 
   bitwiseOr(left: AvmValue, right: AvmValue): AvmNumber {
     return this.ctx.bitwiseOr(left, right);
+  }
+
+  getRealm(): Realm {
+    return this.ctx.getRealm();
+  }
+
+  getThis(): AvmObject | AvmUndefined {
+    return this.ctx.getThis();
   }
 }
 

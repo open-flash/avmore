@@ -85,6 +85,8 @@ export const AvmPropDescriptor = {
   },
 };
 
+export type BoxablePrimitive = boolean | number | string;
+
 export interface AvmSimpleObject {
   readonly type: AvmValueType.Object;
   readonly external: false;
@@ -93,6 +95,7 @@ export interface AvmSimpleObject {
   prototype: AvmObject | AvmNull;
   readonly ownProperties: Map<string, AvmPropDescriptor>;
   callable?: Callable;
+  value?: BoxablePrimitive;
 }
 
 export type AvmObject = AvmExternalObject | AvmSimpleObject;

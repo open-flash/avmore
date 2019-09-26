@@ -227,6 +227,7 @@ export class ExecutionContext implements ActionContext {
   private readonly stack: AvmStack;
   private readonly registers: RegisterTable;
   private target: TargetId | null;
+  private readonly thisArg: AvmObject | AvmUndefined;
 
   constructor(
     vm: Vm,
@@ -237,6 +238,7 @@ export class ExecutionContext implements ActionContext {
     stack: AvmStack,
     registers: RegisterTable,
     target: TargetId | null,
+    thisArg: AvmObject | AvmUndefined,
   ) {
     this.vm = vm;
     this.host = host;
@@ -246,6 +248,7 @@ export class ExecutionContext implements ActionContext {
     this.stack = stack;
     this.registers = registers;
     this.target = target;
+    this.thisArg = thisArg;
   }
 
   public static runScript(vm: Vm, host: Host, budget: RunBudget, script: Avm1Script): void {
@@ -261,6 +264,13 @@ export class ExecutionContext implements ActionContext {
     const stack: AvmStack = new AvmStack();
     const registers: RegisterTable = new RegisterTable(4);
     const target: TargetId | null = script.target; // Initialize with default target
+    let thisArg: AvmObject | AvmUndefined = AVM_UNDEFINED;
+    if (target !== null) {
+      const resolvedTarget: Target | undefined = host.getTarget(target);
+      if (resolvedTarget !== undefined) {
+        thisArg = resolvedTarget.getThis();
+      }
+    }
 
     const ctx: ExecutionContext = new ExecutionContext(
       vm,
@@ -271,6 +281,7 @@ export class ExecutionContext implements ActionContext {
       stack,
       registers,
       target,
+      thisArg,
     );
 
     ctx.runCfg(script.cfgTable);
@@ -658,7 +669,19 @@ export class ExecutionContext implements ActionContext {
     return result;
   }
 
+  public getThis(): AvmObject | AvmUndefined {
+    return this.thisArg;
+  }
+
+  public getRealm(): Realm {
+    return this.vm.realm;
+  }
+
   public getVar(varName: string): AvmValue {
+    if (varName === "this") {
+      return this.getThis();
+    }
+
     const value: AvmValue | undefined = this.scope.getVar(this, varName);
     if (value !== undefined) {
       return value;
@@ -669,14 +692,26 @@ export class ExecutionContext implements ActionContext {
   }
 
   public setVar(varName: string, value: AvmValue): void {
+    if (varName === "this") {
+      throw new Error("NotImplemented: setVar `this`");
+    }
+
     this.scope.setVar(this, varName, value);
   }
 
   public setLocal(varName: string, value: AvmValue): void {
+    if (varName === "this") {
+      throw new Error("NotImplemented: setLocal `this`");
+    }
+
     this.scope.setLocal(this, varName, value);
   }
 
   public touchLocal(varName: string): void {
+    if (varName === "this") {
+      throw new Error("NotImplemented: touchLocal `this`");
+    }
+
     this.scope.touchLocal(this, varName);
   }
 
@@ -1358,6 +1393,7 @@ export class ExecutionContext implements ActionContext {
       stack,
       registers,
       target,
+      thisArg,
     );
 
     const flowResult: FlowResult = ctx.runCfg(callable.body);

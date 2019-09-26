@@ -2,7 +2,8 @@ import { Uint32, UintSize } from "semantic-types";
 import {
   AVM_EMPTY_STRING,
   AVM_NULL,
-  AVM_ONE, AVM_UNDEFINED,
+  AVM_ONE,
+  AVM_UNDEFINED,
   AvmObject,
   AvmPropDescriptor,
   AvmSimpleObject,
@@ -18,6 +19,8 @@ export class Realm {
   public readonly funcProto: AvmObject;
   public readonly arrayClass: AvmObject;
   public readonly arrayProto: AvmObject;
+  public readonly stringClass: AvmObject;
+  public readonly stringProto: AvmObject;
   public readonly globals: Map<string, AvmValue>;
 
   constructor() {
@@ -61,7 +64,7 @@ export class Realm {
       callable: undefined, // TODO: Function callable/constructor
     };
 
-    // Array.[[prototype]]
+    // Array.prototype
     const arrayProto: AvmSimpleObject = {
       type: AvmValueType.Object,
       external: false,
@@ -81,6 +84,26 @@ export class Realm {
       callable: undefined,
     };
 
+    // String.prototype
+    const stringProto: AvmSimpleObject = {
+      type: AvmValueType.Object,
+      external: false,
+      class: "Object",
+      prototype: funcProto,
+      ownProperties: new Map(),
+      callable: undefined,
+    };
+
+    // String
+    const stringClass: AvmSimpleObject = {
+      type: AvmValueType.Object,
+      external: false,
+      class: "Function",
+      prototype: funcProto,
+      ownProperties: new Map(),
+      callable: undefined,
+    };
+
     objectClass.callable = createObjectCall(objectClass, objectProto);
     objectClass.ownProperties.set("prototype", AvmPropDescriptor.data(objectProto));
     populateObjectProto(objectProto.ownProperties, funcProto);
@@ -89,15 +112,22 @@ export class Realm {
     arrayClass.ownProperties.set("prototype", AvmPropDescriptor.data(arrayProto));
     populateArrayProto(arrayProto.ownProperties, arrayClass, funcProto);
 
+    stringClass.callable = createStringCall(stringProto);
+    stringClass.ownProperties.set("prototype", AvmPropDescriptor.data(stringProto));
+    populateStringProto(stringProto.ownProperties, stringClass);
+
     this.objectClass = objectClass;
     this.objectProto = objectProto;
     this.funcClass = funcClass;
     this.funcProto = funcProto;
     this.arrayClass = arrayClass;
     this.arrayProto = arrayProto;
+    this.stringClass = stringClass;
+    this.stringProto = stringProto;
     this.globals = new Map([
       ["Object", objectClass],
       ["Array", arrayClass],
+      ["String", stringClass],
       ["ASnative", bindingFromHostFunction(funcProto, asNativeHandler)],
       ["ASconstructor", bindingFromHostFunction(funcProto, asConstructorHandler)],
       ["ASSetNative", bindingFromHostFunction(funcProto, asSetNativeHandler)],
@@ -214,6 +244,20 @@ function populateObjectProto(
   }
 }
 
+// > 15.4 Array Objects
+// >
+// > Array objects give special treatment to a certain class of property names. A property name P (in the form of
+// > a string value) is an array index if and only if ToString(ToUint32(P)) is equal to P and ToUint32(P) is not
+// > equal to 2 32−1. Every Array object has a length property whose value is always a nonnegative integer
+// > 32less than 2 . The value of the length property is numerically greater than the name of every property
+// > whose name is an array index; whenever a property of an Array object is created or changed, other
+// > properties are adjusted as necessary to maintain this invariant. Specifically, whenever a property is added
+// > whose name is an array index, the length property is changed, if necessary, to be one more than the
+// > numeric value of that array index; and whenever the length property is changed, every property whose
+// > name is an array index whose value is not smaller than the new length is automatically deleted. This
+// > constraint applies only to properties of the Array object itself and is unaffected by length or array index
+// > properties that may be inherited from its prototype.
+
 function createArrayCall(arrayClass: AvmSimpleObject, arrayProto: AvmSimpleObject): HostFunction {
   return {type: CallableType.Host, handler};
 
@@ -223,7 +267,7 @@ function createArrayCall(arrayClass: AvmSimpleObject, arrayProto: AvmSimpleObjec
     // > When `Array` is called as a function rather than as a constructor, it creates and
     // > initialises a new Array object. Thus the function call `Array(...)` is equivalent to the
     // > object creation expression `new Array(...)` with the same arguments.
-    // >
+
     // > 15.4.1.1  Array ( [ item1 [ , item2 [ , ... ] ] ] )
     // >
     // > When the `Array` function is called the following steps are taken:
@@ -381,6 +425,59 @@ function populateArrayProto(
   // > implementation-dependent.
 }
 
+// > 15.5 String Objects
+
+function createStringCall(stringProto: AvmSimpleObject): HostFunction {
+  return {type: CallableType.Host, handler};
+
+  function handler(ctx: HostCallContext): AvmCallResult {
+    // > 15.5.1 The String Constructor Called as a Function
+    // >
+    // > When `String` is called as a function rather than as a constructor, it performs a type
+    // > conversion.
+
+    // > 15.5.1.1 String ( [ value ] )
+    // >
+    // > Returns a string value (not a String object) computed by ToString(_value_). If _value_ is
+    // > not supplied, the empty string `""` is returned.
+    if (ctx.callType === CallType.Apply) {
+      return ctx.args.length > 0
+        ? ctx.toAvmString(ctx.args[0])
+        : AVM_EMPTY_STRING;
+    }
+
+    // assert: callType === CallType.Construct
+
+    if (ctx.thisArg.external) {
+      // This may happen due to inheritance
+      throw new Error("NotImplemented: new String() on external object");
+    }
+
+    // > 15.5.2 The String Constructor
+    // >
+    // > When `String` is called as part of a `new` expression, it is a constructor: it initialises
+    // > the newly created object.
+
+    // > 15.5.2.1 new String ( [ value ] )
+    // >
+    // > The [[Prototype]] property of the newly constructed object is set to the original String
+    // > prototype object, the one that is the initial value of `String.prototype` (15.5.3.1).
+    // TODO: check how it interacts with inheritance
+    ctx.thisArg.prototype = stringProto;
+
+    // > The [[Class]] property of the newly constructed object is set to `"String"`.
+    ctx.thisArg.class = "String";
+
+    // > The [[Value]] property of the newly constructed object is set to ToString(_value_), or to
+    // > the empty string if value is not supplied.
+    ctx.thisArg.value = ctx.args.length > 0
+      ? ctx.toHostString(ctx.args[0])
+      : "";
+
+    return ctx.thisArg;
+  }
+}
+
 // ASnative
 function asNativeHandler(): AvmCallResult {
   throw new Error("NotImplemented: ASnative");
@@ -444,4 +541,11 @@ function asSetPropFlagsHandler(ctx: HostCallContext): AvmCallResult {
   }
 
   return AVM_UNDEFINED;
+}
+
+function populateStringProto(
+  props: Map<string, AvmPropDescriptor>,
+  stringClass: AvmSimpleObject,
+): void {
+  props.set("constructor", AvmPropDescriptor.data(stringClass));
 }
