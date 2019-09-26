@@ -98,6 +98,10 @@ export class Realm {
     this.globals = new Map([
       ["Object", objectClass],
       ["Array", arrayClass],
+      ["ASnative", bindingFromHostFunction(funcProto, asNativeHandler)],
+      ["ASconstructor", bindingFromHostFunction(funcProto, asConstructorHandler)],
+      ["ASSetNative", bindingFromHostFunction(funcProto, asSetNativeHandler)],
+      ["ASSetPropFlags", bindingFromHostFunction(funcProto, asSetPropFlagsHandler)],
     ]);
   }
 }
@@ -375,4 +379,24 @@ function populateArrayProto(
   // > Array object. Therefore, it can be transferred to other kinds of objects for use as a method.
   // > Whether the `join` function can be applied successfully to a host object is
   // > implementation-dependent.
+}
+
+// ASnative
+function asNativeHandler(): AvmCallResult {
+  throw new Error("NotImplemented: ASnative");
+}
+
+// ASconstructor
+function asConstructorHandler(): AvmCallResult {
+  throw new Error("NotImplemented: ASconstructor");
+}
+
+// ASSetNative
+function asSetNativeHandler(): AvmCallResult {
+  throw new Error("NotImplemented: ASSetNative");
+}
+
+// ASSetPropFlags
+function asSetPropFlagsHandler(): AvmCallResult {
+  throw new Error("NotImplemented: ASSetPropFlags");
 }

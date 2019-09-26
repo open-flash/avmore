@@ -37,6 +37,9 @@ describe("avm1", function () {
 
       const globalObject: AvmSimpleObject = vm.newObject();
       vm.realm.globals.set("_global", globalObject);
+      for (const [globalName, globalValue] of vm.realm.globals) {
+        globalObject.ownProperties.set(globalName, AvmPropDescriptor.data(globalValue));
+      }
       {
         const flashPackage: AvmSimpleObject = vm.newObject();
         globalObject.ownProperties.set("flash", AvmPropDescriptor.data(flashPackage));
