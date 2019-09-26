@@ -11,17 +11,15 @@ import {
 import { AvmCallResult, CallableType, CallType, HostCallContext, HostCallHandler } from "./function";
 import { ArrayRealm, createArrayRealm } from "./realm/array";
 import { createMathRealm, MathRealm } from "./realm/math";
-import { numberConstructor } from "./realm/number";
+import { createNumberRealm, NumberRealm } from "./realm/number";
 import { createStringRealm, StringRealm } from "./realm/string";
 
-export interface Realm extends ArrayRealm, MathRealm, StringRealm {
+export interface Realm extends ArrayRealm, MathRealm, NumberRealm, StringRealm {
   objectClass: AvmObject;
   objectProto: AvmObject;
   funcClass: AvmObject;
   funcProto: AvmObject;
 
-  numberClass: AvmObject;
-  numberProto: AvmObject;
   globals: Map<string, AvmValue>;
 }
 
@@ -66,39 +64,20 @@ export function createRealm(): Realm {
     callable: undefined, // TODO: Function callable/constructor
   };
 
-  // Number.prototype
-  const numberProto: AvmSimpleObject = {
-    type: AvmValueType.Object,
-    external: false,
-    class: "Object",
-    prototype: funcProto,
-    ownProperties: new Map(),
-    callable: undefined,
-  };
-
-  // Number
-  const numberClass: AvmSimpleObject = {
-    type: AvmValueType.Object,
-    external: false,
-    class: "Function",
-    prototype: numberProto,
-    ownProperties: new Map(),
-    callable: {type: CallableType.Host, handler: numberConstructor},
-  };
-
   objectClass.ownProperties.set("prototype", AvmPropDescriptor.data(objectProto));
   populateObjectProto(objectProto.ownProperties, funcProto);
 
   const arrayRealm: ArrayRealm = createArrayRealm(funcProto);
   const mathRealm: MathRealm = createMathRealm(funcProto, objectProto);
+  const numberRealm: NumberRealm = createNumberRealm(funcProto);
   const stringRealm: StringRealm = createStringRealm(funcProto);
 
   const globals: Map<string, AvmValue> = new Map([
-    ["Object", objectClass],
     ["Array", arrayRealm.array],
-    ["String", stringRealm.string],
-    ["Number", numberClass],
     ["Math", mathRealm.math],
+    ["Number", numberRealm.number],
+    ["Object", objectClass],
+    ["String", stringRealm.string],
     ["ASnative", bindingFromHostFunction(funcProto, asNativeHandler)],
     ["ASconstructor", bindingFromHostFunction(funcProto, asConstructorHandler)],
     ["ASSetNative", bindingFromHostFunction(funcProto, asSetNativeHandler)],
@@ -110,11 +89,10 @@ export function createRealm(): Realm {
     objectProto,
     funcClass,
     funcProto,
-    numberClass,
-    numberProto,
     globals,
     ...arrayRealm,
     ...mathRealm,
+    ...numberRealm,
     ...stringRealm,
   };
 }

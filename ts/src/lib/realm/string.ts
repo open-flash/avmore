@@ -1,7 +1,6 @@
 import { AVM_EMPTY_STRING, AvmObject, AvmPropDescriptor, AvmSimpleObject, AvmValueType } from "../avm-value";
 import { AvmCallResult, CallableType, CallType, HostCallContext } from "../function";
 import { bindingFromHostFunction } from "../realm";
-import { array } from "./array";
 
 // > 15.5 String Objects
 
@@ -39,7 +38,7 @@ export function createStringRealm(funcProto: AvmSimpleObject): StringRealm {
   const _stringPrototypeToLowerCase: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeToLowerCase);
   const _stringPrototypeToUpperCase: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeToUpperCase);
 
-  // Array.prototype
+  // String.prototype
   const stringPrototype: AvmSimpleObject = {
     type: AvmValueType.Object,
     external: false,
@@ -65,7 +64,7 @@ export function createStringRealm(funcProto: AvmSimpleObject): StringRealm {
 
   const _stringFromCharCode: AvmObject = bindingFromHostFunction(funcProto, stringFromCharCode);
 
-  // Array
+  // String
   const _string: AvmSimpleObject = {
     type: AvmValueType.Object,
     external: false,
@@ -75,7 +74,7 @@ export function createStringRealm(funcProto: AvmSimpleObject): StringRealm {
       ["prototype", AvmPropDescriptor.data(stringPrototype)],
       ["fromCharCode", AvmPropDescriptor.data(_stringFromCharCode)],
     ]),
-    callable: {type: CallableType.Host, handler: array},
+    callable: {type: CallableType.Host, handler: string},
   };
 
   stringPrototype.ownProperties.set("constructor", AvmPropDescriptor.data(_string));
@@ -100,7 +99,7 @@ export function createStringRealm(funcProto: AvmSimpleObject): StringRealm {
   };
 }
 
-export function stringConstructor(ctx: HostCallContext): AvmCallResult {
+export function string(ctx: HostCallContext): AvmCallResult {
   // > 15.5.1 The String Constructor Called as a Function
   // >
   // > When `String` is called as a function rather than as a constructor, it performs a type
