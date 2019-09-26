@@ -10,6 +10,7 @@ import { ActionContext } from "./context";
 import { AvmFunctionParameter, ParameterState } from "./function";
 import { CfgTable } from "./script";
 
+// tslint:disable-next-line:cyclomatic-complexity
 export function action(ctx: ActionContext, action: CfgAction): void {
   switch (action.action) {
     case ActionType.Add2:
@@ -39,6 +40,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.ConstantPool:
       constantPool(ctx, action);
       break;
+    case ActionType.Decrement:
+      decrement(ctx);
+      break;
     case ActionType.DefineFunction:
       defineFunction(ctx, action);
       break;
@@ -56,6 +60,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
       break;
     case ActionType.Enumerate2:
       enumerate2(ctx);
+      break;
+    case ActionType.Increment:
+      increment(ctx);
       break;
     case ActionType.InitArray:
       initArray(ctx);
@@ -169,6 +176,11 @@ export function constantPool(ctx: ActionContext, action: ConstantPool): void {
   ctx.setConstantPool(pool);
 }
 
+export function decrement(ctx: ActionContext): void {
+  const arg: number = ctx.toHostNumber(ctx.pop());
+  ctx.push(AvmValue.fromHostNumber(arg - 1));
+}
+
 export function defineFunction(ctx: ActionContext, action: CfgDefineFunction): void {
   const name: string | undefined = action.name !== undefined && action.name.length > 0
     ? action.name
@@ -254,6 +266,11 @@ export function divide(ctx: ActionContext): void {
   const right: AvmValue = ctx.pop();
   const left: AvmValue = ctx.pop();
   ctx.push(ctx.divide(left, right));
+}
+
+export function increment(ctx: ActionContext): void {
+  const arg: number = ctx.toHostNumber(ctx.pop());
+  ctx.push(AvmValue.fromHostNumber(arg + 1));
 }
 
 export function initArray(ctx: ActionContext): void {

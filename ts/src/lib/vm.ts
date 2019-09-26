@@ -988,9 +988,6 @@ export class ExecutionContext implements ActionContext {
       case ActionType.Greater:
         this.execGreater();
         break;
-      case ActionType.Increment:
-        this.execIncrement();
-        break;
       case ActionType.InitObject:
         this.execInitObject();
         break;
@@ -1063,13 +1060,6 @@ export class ExecutionContext implements ActionContext {
     const left: AvmValue = this.stack.pop();
     const abstractResult: boolean | undefined = this.abstractCompare(right, left);
     const result: AvmBoolean = AvmValue.fromHostBoolean(abstractResult === undefined ? false : abstractResult);
-    this.stack.push(result);
-  }
-
-  private execIncrement(): void {
-    const arg: AvmValue = this.stack.pop();
-    const argNumber: AvmNumber = AvmValue.toAvmNumber(arg, SWF_VERSION);
-    const result: AvmNumber = {type: AvmValueType.Number, value: argNumber.value + 1};
     this.stack.push(result);
   }
 
