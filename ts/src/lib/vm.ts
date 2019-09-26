@@ -87,7 +87,15 @@ export class Vm {
       throw new Error(`ScriptNotFound: ${scriptId}`);
     }
     const budget: RunBudget = {maxActions, totalActions: 0};
-    ExecutionContext.runScript(this, host, budget, script);
+    try {
+      ExecutionContext.runScript(this, host, budget, script);
+    } catch (e) {
+      if (e instanceof AbortSignal) {
+        return;
+      } else {
+        throw e;
+      }
+    }
   }
 
   public newExternal(handler: AvmExternalHandler): AvmExternalObject {
@@ -204,12 +212,21 @@ interface FlowReturn {
 
 export type FlowResult = FlowReturn | FlowSimple;
 
+abstract class Signal {}
+
 // Wrapper for catchable AVM1 errors.
-class AvmCatchableError {
+class AvmThrowSignal extends Signal {
   public readonly value: AvmValue;
 
   constructor(value: AvmValue) {
+    super();
     this.value = value;
+  }
+}
+
+class AbortSignal extends Signal {
+  constructor() {
+    super();
   }
 }
 
@@ -299,7 +316,8 @@ export class ExecutionContext implements ActionContext {
         try {
           this.exec(action);
         } catch (e) {
-          if (e instanceof AvmCatchableError) {
+          if (e instanceof Signal) {
+            // Propagate signals
             throw e;
           } else {
             throw Incident(e, "SimpleActionError", {blockLabel: block.label, actionIndex: i});
@@ -326,7 +344,7 @@ export class ExecutionContext implements ActionContext {
           break;
         }
         case CfgBlockType.Throw: {
-          throw new AvmCatchableError(this.pop());
+          throw new AvmThrowSignal(this.pop());
         }
         case CfgBlockType.Try: {
           const tryTable: CfgTable = new CfgTable(block.try);
@@ -340,7 +358,8 @@ export class ExecutionContext implements ActionContext {
           try {
             flowResult = this.runCfg(tryTable);
           } catch (e) {
-            if (!(e instanceof AvmCatchableError)) {
+            if (!(e instanceof AvmThrowSignal)) {
+              // Propagate internal errors and abort signals
               throw e;
             }
 
@@ -675,6 +694,14 @@ export class ExecutionContext implements ActionContext {
 
   public getRealm(): Realm {
     return this.vm.realm;
+  }
+
+  public throw(value: AvmValue): never {
+    throw new AvmThrowSignal(value);
+  }
+
+  public abort(): never {
+    throw new AbortSignal();
   }
 
   public getVar(varName: string): AvmValue {

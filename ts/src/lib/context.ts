@@ -83,6 +83,10 @@ export interface BaseContext {
   getRealm(): Realm;
 
   getThis(): AvmObject | AvmUndefined;
+
+  throw(value: AvmValue): never;
+
+  abort(): never;
 }
 
 export interface ScopeContext {

@@ -273,6 +273,14 @@ class HostCallContextImpl implements BaseHostCallContext {
   getThis(): AvmObject | AvmUndefined {
     return this.ctx.getThis();
   }
+
+  throw(value: AvmValue): never {
+    return this.ctx.throw(value);
+  }
+
+  abort(): never {
+    return this.ctx.abort();
+  }
 }
 
 export enum CallType {

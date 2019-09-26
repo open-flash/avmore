@@ -1,11 +1,12 @@
 import { ActionType } from "avm1-tree/action-type";
-import { ConstantPool, Push, StoreRegister } from "avm1-tree/actions";
+import { ConstantPool, GetUrl2, Push, StoreRegister } from "avm1-tree/actions";
 import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgDefineFunction } from "avm1-tree/cfg-actions/cfg-define-function";
 import { CfgDefineFunction2 } from "avm1-tree/cfg-actions/cfg-define-function2";
+import { GetUrl2Method } from "avm1-tree/get-url2-method";
 import { ValueType as AstValueType } from "avm1-tree/value-type";
 import { Uint32, UintSize } from "semantic-types";
-import { AVM_NULL, AVM_UNDEFINED, AvmSimpleObject, AvmString, AvmValue } from "./avm-value";
+import { AVM_NULL, AVM_UNDEFINED, AvmSimpleObject, AvmString, AvmValue, AvmValueType } from "./avm-value";
 import { ActionContext } from "./context";
 import { AvmFunctionParameter, ParameterState } from "./function";
 import { CfgTable } from "./script";
@@ -78,6 +79,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
       break;
     case ActionType.GetProperty:
       getProperty(ctx);
+      break;
+    case ActionType.GetUrl2:
+      getUrl2(ctx, action);
       break;
     case ActionType.GetVariable:
       getVariable(ctx);
@@ -330,6 +334,22 @@ export function getProperty(ctx: ActionContext): void {
     throw new Error(`InvalidPropertyIndex: ${keyIndex}`);
   }
   ctx.push(ctx.getStringMember(target, key));
+}
+
+export function getUrl2(ctx: ActionContext, action: GetUrl2): void {
+  const target: AvmValue = ctx.pop();
+  const url: string = ctx.toHostString(ctx.pop());
+  if (
+    url === "FSCommand:quit"
+    && target.type === AvmValueType.String
+    && target.value === ""
+    && action.method === GetUrl2Method.None
+    && !action.loadTarget
+    && !action.loadVariables
+  ) {
+    ctx.abort();
+  }
+  throw new Error("NotImplemented: GetUrl2");
 }
 
 export function getVariable(ctx: ActionContext): void {
