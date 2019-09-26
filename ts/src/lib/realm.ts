@@ -2,7 +2,7 @@ import { Uint32, UintSize } from "semantic-types";
 import {
   AVM_EMPTY_STRING,
   AVM_NULL,
-  AVM_ONE,
+  AVM_ONE, AVM_UNDEFINED,
   AvmObject,
   AvmPropDescriptor,
   AvmSimpleObject,
@@ -397,6 +397,51 @@ function asSetNativeHandler(): AvmCallResult {
 }
 
 // ASSetPropFlags
-function asSetPropFlagsHandler(): AvmCallResult {
-  throw new Error("NotImplemented: ASSetPropFlags");
+function asSetPropFlagsHandler(ctx: HostCallContext): AvmCallResult {
+  const target: AvmValue = ctx.getArg(0);
+  const avmProperties: AvmValue = ctx.getArg(1);
+  const setMask: Uint32 = ctx.toHostUint32(ctx.getArg(2));
+  const unsetMask: Uint32 = ctx.toHostUint32(ctx.getArg(3));
+
+  if (target.type !== AvmValueType.Object) {
+    throw new Error("TypeError: ASSetPropFlags on non-object");
+  }
+  const properties: string[] = [];
+  if (avmProperties.type === AvmValueType.Null) {
+    for (const key of ctx.getOwnKeys(target)) {
+      properties.push(key.value);
+    }
+  } else {
+    const propList: string = ctx.toHostString(avmProperties);
+    for (const rawKey of propList.split(",")) {
+      const key: string = rawKey.trim();
+      if (key !== "") {
+        properties.push(key);
+      }
+    }
+  }
+  if (target.external) {
+    throw new Error("NotImplemented: ASSetPropFlags for external objects");
+  }
+  for (const key of properties) {
+    const propDesc: AvmPropDescriptor | undefined = target.ownProperties.get(key);
+    if (propDesc === undefined) {
+      // TODO: Warn
+      continue;
+    }
+
+    // TODO: Refactor correspondence between AS flags and Avmore flags
+    // The code wasn't test thoroughly, and `configurable` is used in place of `deletable`
+
+    const propFlags: Uint32 = 0
+      | (propDesc.enumerable ? 0 : 1)
+      | (propDesc.configurable ? 0 : 2)
+      | (propDesc.writable ? 0 : 4);
+    const newFlags: Uint32 = (propFlags | setMask) & ~unsetMask;
+    propDesc.enumerable = (newFlags & 1) === 0;
+    propDesc.configurable = (newFlags & 2) === 0;
+    propDesc.writable = (newFlags & 4) === 0;
+  }
+
+  return AVM_UNDEFINED;
 }

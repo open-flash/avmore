@@ -58,18 +58,18 @@ export interface AvmUndefined {
 export type AvmPropDescriptor = AvmAccessorPropDescriptor | AvmDataPropDescriptor;
 
 export interface AvmAccessorPropDescriptor {
-  readonly writable: boolean;
-  readonly enumerable: boolean;
-  readonly configurable: boolean;
+  writable: boolean;
+  enumerable: boolean;
+  configurable: boolean;
   readonly value: undefined;
   readonly get: AvmValue;
   readonly set: AvmValue;
 }
 
 export interface AvmDataPropDescriptor {
-  readonly writable: boolean;
-  readonly enumerable: boolean;
-  readonly configurable: boolean;
+  writable: boolean;
+  enumerable: boolean;
+  configurable: boolean;
   readonly value: AvmValue;
   readonly get: undefined;
   readonly set: undefined;
