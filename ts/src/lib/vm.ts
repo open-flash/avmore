@@ -175,13 +175,9 @@ enum ToPrimitiveHint {
 }
 
 enum FlowResultType {
-  Simple,
   Return,
-}
-
-interface FlowSimple {
-  type: FlowResultType.Simple;
-  target: NullableCfgLabel;
+  Simple,
+  Throw,
 }
 
 interface FlowReturn {
@@ -189,7 +185,17 @@ interface FlowReturn {
   value: AvmValue;
 }
 
-export type FlowResult = FlowReturn | FlowSimple;
+interface FlowSimple {
+  type: FlowResultType.Simple;
+  target: NullableCfgLabel;
+}
+
+interface FlowThrow {
+  type: FlowResultType.Throw;
+  value: AvmValue;
+}
+
+export type FlowResult = FlowReturn | FlowSimple | FlowThrow;
 
 abstract class Signal {
 }
@@ -286,14 +292,15 @@ export class ExecutionContext implements ActionContext {
     );
 
     try {
-      ctx.runCfg(script.cfgTable);
+      const flowResult: FlowResult = ctx.runCfg(script.cfgTable);
+      if (flowResult.type === FlowResultType.Throw) {
+        // TODO: Handle erors thrown when converting this error to string
+        const valueString: string = ctx.toHostString(flowResult.value);
+        host.warn(new UncaughtException(valueString));
+      }
     } catch (e) {
       if (e instanceof AbortSignal) {
         return;
-      } else if (e instanceof AvmThrowSignal) {
-        // TODO: Handle erors thrown when converting this error to string
-        const valueString: string = ctx.toHostString(e.value);
-        host.warn(new UncaughtException(valueString));
       } else {
         throw e;
       }
@@ -312,8 +319,10 @@ export class ExecutionContext implements ActionContext {
         try {
           this.exec(action);
         } catch (e) {
-          if (e instanceof Signal) {
-            // Propagate signals
+          if (e instanceof AvmThrowSignal) {
+            return {type: FlowResultType.Throw, value: e.value};
+          } else if (e instanceof Signal) {
+            // Propagate other signals (abort)
             throw e;
           } else {
             throw Incident(e, "SimpleActionError", {blockLabel: block.label, actionIndex: i});
@@ -368,6 +377,8 @@ export class ExecutionContext implements ActionContext {
           }
           break;
         }
+        case FlowResultType.Throw:
+          return flowResult;
         default: {
           throw new Error(`UnexpectedFlowResult: ${flowResult}`);
         }
@@ -1504,59 +1515,88 @@ export class ExecutionContext implements ActionContext {
   }
 
   private flowTryBlock(block: CfgTryBlock): FlowResult {
-    let flowResult: FlowResult;
-
     const tryTable: CfgTable = new CfgTable(block.try);
-    const onErrorTable: CfgTable | undefined = block.catch !== undefined
+    const catchTable: CfgTable | undefined = block.catch !== undefined
       ? new CfgTable(block.catch)
-      : (block.finally !== undefined ? new CfgTable(block.finally) : undefined);
+      : undefined;
     const finallyTable: CfgTable | undefined = block.finally !== undefined
       ? new CfgTable(block.finally)
       : undefined;
 
-    try {
-      flowResult = this.runCfg(tryTable);
-    } catch (e) {
-      if (!(e instanceof AvmThrowSignal)) {
-        // Propagate internal errors and abort signals
-        throw e;
+    let flowResult: FlowResult;
+    flowResult = this.runCfg(tryTable);
+    if (flowResult.type === FlowResultType.Throw && catchTable !== undefined) {
+      switch (block.catchTarget.type) {
+        case CatchTargetType.Register:
+          this.setReg(block.catchTarget.target, flowResult.value);
+          break;
+        case CatchTargetType.Variable:
+          this.setVar(block.catchTarget.target, flowResult.value);
+          break;
+        default:
+          throw new Error("UnexpectedCatchTargetType");
       }
-
-      if (onErrorTable !== undefined) {
-        if (block.catch !== undefined) {
-          switch (block.catchTarget.type) {
-            case CatchTargetType.Register:
-              this.setReg(block.catchTarget.target, e.value);
-              break;
-            case CatchTargetType.Variable:
-              this.setVar(block.catchTarget.target, e.value);
-              break;
-            default:
-              throw new Error("UnexpectedCatchTargetType");
+      flowResult = this.runCfg(catchTable);
+    }
+    if (finallyTable !== undefined) {
+      let shouldRunFinally: boolean = false;
+      switch (flowResult.type) {
+        case FlowResultType.Simple: {
+          if (flowResult.target === finallyTable.entryBlock.label) {
+            shouldRunFinally = true;
+          }
+          break;
+        }
+        case FlowResultType.Return:
+        case FlowResultType.Throw: {
+          shouldRunFinally = true;
+          break;
+        }
+        default: {
+          throw new Error(`UnexpectedTryCatchFlowResult: ${flowResult}`);
+        }
+      }
+      if (shouldRunFinally) {
+        const finallyFlowResult: FlowResult = this.runCfg(finallyTable);
+        switch (finallyFlowResult.type) {
+          case FlowResultType.Return: {
+            flowResult = finallyFlowResult;
+            break;
+          }
+          case FlowResultType.Simple: {
+            // Only update if the try/catch flow result was simple
+            if (flowResult.type === FlowResultType.Simple) {
+              flowResult = finallyFlowResult;
+            }
+            break;
+          }
+          case FlowResultType.Throw: {
+            flowResult = finallyFlowResult;
+            break;
+          }
+          default: {
+            throw new Error(`UnexpectedFinallyFlowResult: ${flowResult}`);
           }
         }
-
-        flowResult = this.runCfg(onErrorTable);
-      } else {
-        throw e;
+        if (finallyFlowResult.type === FlowResultType.Return) {
+          flowResult = finallyFlowResult;
+        }
       }
-    }
-
-    // TODO Check how `return` is handled in presence of `Finally`
-
-    if (
-      finallyTable !== undefined
-      && finallyTable.entryBlock !== undefined
-      && flowResult.type === FlowResultType.Simple
-      && flowResult.target !== null
-      && flowResult.target === finallyTable.entryBlock.label
-    ) {
-      flowResult = this.runCfg(finallyTable);
     }
 
     return flowResult;
   }
 }
+
+// // Returns the flow result that dominates the other one: it decides which flow
+// // result to use as the overall result for the `finally` body.
+// // The relative strength is defined as:
+// // Throw > Result > Simple
+// function getDominantFlowResult(primary: FlowResult, secondary: FlowResult): FlowResult {
+//   switch (primary.type) {
+//
+//   }
+// }
 
 /**
  * Retrieve the variable name for `TargetHasNoPropertyWarning`

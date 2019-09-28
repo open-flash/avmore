@@ -43,8 +43,7 @@ export interface Avm1Script {
 
 // TODO: Do not recompute table for the same CFG
 export class CfgTable {
-  // `undefined` means the block is a no-op.
-  readonly entryBlock: CfgBlock | undefined;
+  readonly entryBlock: CfgBlock;
   readonly labelToBlock: ReadonlyMap<CfgLabel, CfgBlock>;
 
   constructor(cfg: Cfg) {
