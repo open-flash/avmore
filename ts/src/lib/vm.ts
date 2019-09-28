@@ -1,14 +1,14 @@
 // tslint:disable:max-classes-per-file max-file-line-count
 
 import { cfgFromBytes } from "avm1-parser";
-import { ActionType } from "avm1-tree/action-type";
-import { GotoFrame, SetTarget } from "avm1-tree/actions";
-import { CatchTargetType } from "avm1-tree/catch-targets/_type";
-import { CfgAction } from "avm1-tree/cfg-action";
-import { CfgBlock } from "avm1-tree/cfg-block";
-import { CfgBlockType } from "avm1-tree/cfg-block-type";
-import { CfgTryBlock } from "avm1-tree/cfg-blocks/cfg-try-block";
-import { NullableCfgLabel } from "avm1-tree/cfg-label";
+import { ActionType } from "avm1-types/action-type";
+import { GotoFrame, SetTarget } from "avm1-types/actions";
+import { CatchTargetType } from "avm1-types/catch-targets/_type";
+import { CfgAction } from "avm1-types/cfg-action";
+import { CfgBlock } from "avm1-types/cfg-block";
+import { CfgBlockType } from "avm1-types/cfg-block-type";
+import { CfgTryBlock } from "avm1-types/cfg-blocks/cfg-try-block";
+import { NullableCfgLabel } from "avm1-types/cfg-label";
 import { Incident } from "incident";
 import { Sint32, Uint32, UintSize } from "semantic-types";
 import * as actions from "./actions";

@@ -1,10 +1,10 @@
-import { ActionType } from "avm1-tree/action-type";
-import { ConstantPool, GetUrl2, Push, StoreRegister } from "avm1-tree/actions";
-import { CfgAction } from "avm1-tree/cfg-action";
-import { CfgDefineFunction } from "avm1-tree/cfg-actions/cfg-define-function";
-import { CfgDefineFunction2 } from "avm1-tree/cfg-actions/cfg-define-function2";
-import { GetUrl2Method } from "avm1-tree/get-url2-method";
-import { ValueType as AstValueType } from "avm1-tree/value-type";
+import { ActionType } from "avm1-types/action-type";
+import { ConstantPool, GetUrl2, Push, StoreRegister } from "avm1-types/actions";
+import { CfgAction } from "avm1-types/cfg-action";
+import { CfgDefineFunction } from "avm1-types/cfg-actions/cfg-define-function";
+import { CfgDefineFunction2 } from "avm1-types/cfg-actions/cfg-define-function2";
+import { GetUrl2Method } from "avm1-types/get-url2-method";
+import { ValueType as AstValueType } from "avm1-types/value-type";
 import { Uint32, UintSize } from "semantic-types";
 import { AVM_NULL, AVM_UNDEFINED, AvmSimpleObject, AvmString, AvmValue, AvmValueType } from "./avm-value";
 import { ActionContext } from "./context";

@@ -1,6 +1,6 @@
-import { Cfg } from "avm1-tree/cfg";
-import { CfgBlock } from "avm1-tree/cfg-block";
-import { CfgLabel } from "avm1-tree/cfg-label";
+import { Cfg } from "avm1-types/cfg";
+import { CfgBlock } from "avm1-types/cfg-block";
+import { CfgLabel } from "avm1-types/cfg-label";
 import { AvmValue } from "./avm-value";
 import { MovieId, TargetId } from "./vm";
 
@@ -49,10 +49,12 @@ export class CfgTable {
 
   constructor(cfg: Cfg) {
     const labelToBlock: Map<CfgLabel, CfgBlock> = new Map();
-    for (const block of cfg.blocks) {
-      labelToBlock.set(block.label, block);
+    labelToBlock.set(cfg.head.label, cfg.head);
+    for (const tailBlock of cfg.tail) {
+      labelToBlock.set(tailBlock.label, tailBlock);
     }
-    this.entryBlock = cfg.blocks.length > 0 ? cfg.blocks[0] : undefined;
+
+    this.entryBlock = cfg.head;
     this.labelToBlock = labelToBlock;
   }
 }
