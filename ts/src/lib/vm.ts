@@ -7,6 +7,7 @@ import { CatchTargetType } from "avm1-tree/catch-targets/_type";
 import { CfgAction } from "avm1-tree/cfg-action";
 import { CfgBlock } from "avm1-tree/cfg-block";
 import { CfgBlockType } from "avm1-tree/cfg-block-type";
+import { CfgTryBlock } from "avm1-tree/cfg-blocks/cfg-try-block";
 import { NullableCfgLabel } from "avm1-tree/cfg-label";
 import { Incident } from "incident";
 import { Sint32, Uint32, UintSize } from "semantic-types";
@@ -344,54 +345,7 @@ export class ExecutionContext implements ActionContext {
           throw new AvmThrowSignal(this.pop());
         }
         case CfgBlockType.Try: {
-          const tryTable: CfgTable = new CfgTable(block.try);
-          const onErrorTable: CfgTable | undefined = block.catch !== undefined
-            ? new CfgTable(block.catch)
-            : (block.finally !== undefined ? new CfgTable(block.finally) : undefined);
-          const finallyTable: CfgTable | undefined = block.finally !== undefined
-            ? new CfgTable(block.finally)
-            : undefined;
-
-          try {
-            flowResult = this.runCfg(tryTable);
-          } catch (e) {
-            if (!(e instanceof AvmThrowSignal)) {
-              // Propagate internal errors and abort signals
-              throw e;
-            }
-
-            if (onErrorTable !== undefined) {
-              if (block.catch !== undefined) {
-                switch (block.catchTarget.type) {
-                  case CatchTargetType.Register:
-                    this.setReg(block.catchTarget.target, e.value);
-                    break;
-                  case CatchTargetType.Variable:
-                    this.setVar(block.catchTarget.target, e.value);
-                    break;
-                  default:
-                    throw new Error("UnexpectedCatchTargetType");
-                }
-              }
-
-              flowResult = this.runCfg(onErrorTable);
-            } else {
-              throw e;
-            }
-          }
-
-          // TODO Check how `return` is handled in presence of `Finally`
-
-          if (
-            finallyTable !== undefined
-            && finallyTable.entryBlock !== undefined
-            && flowResult.type === FlowResultType.Simple
-            && flowResult.target !== null
-            && flowResult.target === finallyTable.entryBlock.label
-          ) {
-            flowResult = this.runCfg(finallyTable);
-          }
-
+          flowResult = this.flowTryBlock(block);
           break;
         }
         default: {
@@ -1547,6 +1501,60 @@ export class ExecutionContext implements ActionContext {
         throw new Error(`UnexpectedFlowResultType: ${flowResult}`);
       }
     }
+  }
+
+  private flowTryBlock(block: CfgTryBlock): FlowResult {
+    let flowResult: FlowResult;
+
+    const tryTable: CfgTable = new CfgTable(block.try);
+    const onErrorTable: CfgTable | undefined = block.catch !== undefined
+      ? new CfgTable(block.catch)
+      : (block.finally !== undefined ? new CfgTable(block.finally) : undefined);
+    const finallyTable: CfgTable | undefined = block.finally !== undefined
+      ? new CfgTable(block.finally)
+      : undefined;
+
+    try {
+      flowResult = this.runCfg(tryTable);
+    } catch (e) {
+      if (!(e instanceof AvmThrowSignal)) {
+        // Propagate internal errors and abort signals
+        throw e;
+      }
+
+      if (onErrorTable !== undefined) {
+        if (block.catch !== undefined) {
+          switch (block.catchTarget.type) {
+            case CatchTargetType.Register:
+              this.setReg(block.catchTarget.target, e.value);
+              break;
+            case CatchTargetType.Variable:
+              this.setVar(block.catchTarget.target, e.value);
+              break;
+            default:
+              throw new Error("UnexpectedCatchTargetType");
+          }
+        }
+
+        flowResult = this.runCfg(onErrorTable);
+      } else {
+        throw e;
+      }
+    }
+
+    // TODO Check how `return` is handled in presence of `Finally`
+
+    if (
+      finallyTable !== undefined
+      && finallyTable.entryBlock !== undefined
+      && flowResult.type === FlowResultType.Simple
+      && flowResult.target !== null
+      && flowResult.target === finallyTable.entryBlock.label
+    ) {
+      flowResult = this.runCfg(finallyTable);
+    }
+
+    return flowResult;
   }
 }
 
