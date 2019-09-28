@@ -22,6 +22,7 @@ const WHITELIST: ReadonlySet<string> = new Set([
   // "branches/conditional-if",
   // "try/try-catch-err",
   // "try/try-ok",
+  // "try/try-throw-catch-finally-err",
   // "haxe/hello-world",
 ]);
 

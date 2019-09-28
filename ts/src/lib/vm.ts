@@ -351,7 +351,7 @@ export class ExecutionContext implements ActionContext {
           break;
         }
         case CfgBlockType.Throw: {
-          throw new AvmThrowSignal(this.pop());
+          return {type: FlowResultType.Throw, value: this.pop()};
         }
         case CfgBlockType.Try: {
           flowResult = this.flowTryBlock(block);
@@ -1508,8 +1508,11 @@ export class ExecutionContext implements ActionContext {
         // TODO: Assert null target
         return AVM_UNDEFINED;
       }
+      case FlowResultType.Throw: {
+        throw new AvmThrowSignal(flowResult.value);
+      }
       default: {
-        throw new Error(`UnexpectedFlowResultType: ${flowResult}`);
+        throw new Error(`UnexpectedCallFlowResultType: ${flowResult}`);
       }
     }
   }
@@ -1564,8 +1567,9 @@ export class ExecutionContext implements ActionContext {
             break;
           }
           case FlowResultType.Simple: {
-            // Only update if the try/catch flow result was simple
-            if (flowResult.type === FlowResultType.Simple) {
+            // Only update if the finally ends the function or
+            // the try/catch flow result was simple
+            if (finallyFlowResult.target === null || flowResult.type === FlowResultType.Simple) {
               flowResult = finallyFlowResult;
             }
             break;
@@ -1578,25 +1582,12 @@ export class ExecutionContext implements ActionContext {
             throw new Error(`UnexpectedFinallyFlowResult: ${flowResult}`);
           }
         }
-        if (finallyFlowResult.type === FlowResultType.Return) {
-          flowResult = finallyFlowResult;
-        }
       }
     }
 
     return flowResult;
   }
 }
-
-// // Returns the flow result that dominates the other one: it decides which flow
-// // result to use as the overall result for the `finally` body.
-// // The relative strength is defined as:
-// // Throw > Result > Simple
-// function getDominantFlowResult(primary: FlowResult, secondary: FlowResult): FlowResult {
-//   switch (primary.type) {
-//
-//   }
-// }
 
 /**
  * Retrieve the variable name for `TargetHasNoPropertyWarning`
