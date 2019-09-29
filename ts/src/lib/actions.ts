@@ -180,7 +180,7 @@ export function callFunction(ctx: ActionContext): void {
   }
   const fn: AvmValue = ctx.getVar(fnName);
 
-  const result: AvmValue = ctx.apply(fn, AVM_UNDEFINED, []);
+  const result: AvmValue = ctx.apply(fn, AVM_UNDEFINED, args);
 
   ctx.push(result);
 }

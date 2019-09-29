@@ -8,6 +8,7 @@ import { CfgAction } from "avm1-types/cfg-action";
 import { CfgBlock } from "avm1-types/cfg-block";
 import { CfgBlockType } from "avm1-types/cfg-block-type";
 import { CfgTryBlock } from "avm1-types/cfg-blocks/cfg-try-block";
+import { CfgWaitForFrameBlock } from "avm1-types/cfg-blocks/cfg-wait-for-frame-block";
 import { NullableCfgLabel } from "avm1-types/cfg-label";
 import { Incident } from "incident";
 import { Sint32, Uint32, UintSize } from "semantic-types";
@@ -355,6 +356,10 @@ export class ExecutionContext implements ActionContext {
         }
         case CfgBlockType.Try: {
           flowResult = this.flowTryBlock(block);
+          break;
+        }
+        case CfgBlockType.WaitForFrame: {
+          flowResult = this.flowWaitForFrameBlock(block);
           break;
         }
         default: {
@@ -1302,32 +1307,6 @@ export class ExecutionContext implements ActionContext {
     this.host.trace(messageStr.value);
   }
 
-  // private execWaitForFrame(action: WaitForFrame): void {
-  //   if (this.target === null) {
-  //     console.warn("NoCurrentTarget");
-  //     return;
-  //   }
-  //   const target: Target | undefined = this.host.getTarget(this.target);
-  //   if (target === undefined) {
-  //     console.warn("TargetNotFound");
-  //     return;
-  //   }
-  //   const progress: { loaded: UintSize; total: UintSize } = target.getFrameLoadingProgress();
-  //
-  //   // - `action.frame` is 0-indexed.
-  //   // - `progress.loaded` returns values in `[0, progress.total]` (inclusive) but since we are
-  //   //   running the script, the first frame should be loaded and we can expected
-  //   //   `progress.loaded >= 1` (or maybe we may get `0` using `setTarget` shenanigans)
-  //   // - `progress.loaded >= progress.total` implies `isRequestedFrameLoaded` regardless of frame
-  //   //   index.
-  //
-  //   const isRequestedFrameLoaded: boolean = progress.loaded >= progress.total || progress.loaded > action.frame;
-  //
-  //   if (isRequestedFrameLoaded) {
-  //     this.skipCount = action.skipCount;
-  //   }
-  // }
-
   private toUintSize(avmValue: AvmValue): number {
     if (avmValue.type === AvmValueType.Number && avmValue.value >= 0 && Math.floor(avmValue.value) === avmValue.value) {
       return avmValue.value;
@@ -1586,6 +1565,29 @@ export class ExecutionContext implements ActionContext {
     }
 
     return flowResult;
+  }
+
+  private flowWaitForFrameBlock(block: CfgWaitForFrameBlock): FlowResult {
+    if (this.target === null) {
+      throw new Error("MissingTargetId: Cannot run WaitForFrame");
+    }
+    const target: Target | undefined = this.host.getTarget(this.target);
+    if (target === undefined) {
+      throw new Error("TargetNotFound: Cannot run WaitForFrame");
+    }
+    const progress: { loaded: UintSize; total: UintSize } = target.getFrameLoadingProgress();
+
+    // - `action.frame` is 0-indexed.
+    // - `progress.loaded` returns values in `[0, progress.total]` (inclusive) but since we are
+    //   running the script, the first frame should be loaded and we can expected
+    //   `progress.loaded >= 1` (or maybe we may get `0` using `setTarget` shenanigans?)
+    // - `progress.loaded >= progress.total` implies `isRequestedFrameLoaded` regardless of frame
+    //   index.
+
+    const isLoaded: boolean = progress.loaded >= progress.total || progress.loaded > block.frame;
+
+    const jumpTarget: NullableCfgLabel = isLoaded ? block.ifLoaded : block.ifNotLoaded;
+    return {type: FlowResultType.Simple, target: jumpTarget};
   }
 }
 

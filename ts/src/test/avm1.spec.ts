@@ -1,8 +1,17 @@
 import chai from "chai";
 import fs from "fs";
 import sysPath from "path";
-import { AVM_EMPTY_STRING, AVM_FALSE, AvmPropDescriptor, AvmSimpleObject, AvmValue } from "../lib/avm-value";
+import {
+  AVM_EMPTY_STRING,
+  AVM_FALSE,
+  AVM_UNDEFINED,
+  AvmPropDescriptor,
+  AvmSimpleObject,
+  AvmValue
+} from "../lib/avm-value";
+import { HostCallContext } from "../lib/function";
 import { LoggedHost } from "../lib/host";
+import { bindingFromHostFunction } from "../lib/realm";
 import { TargetId, Vm } from "../lib/vm";
 import meta from "./meta.js";
 import { readFile, readTextFile } from "./utils";
@@ -16,6 +25,9 @@ const BLACKLIST: ReadonlySet<string> = new Set([
   "avm1-bytes/constant-on-stack-definition", // Reads data from the uninitialized constant pool
   "avm1-bytes/constant-without-pool", // Reads data from the uninitialized constant pool
   "avm1-bytes/corrupted-push", // The parser does not supported corrupted actions yet
+  "nested-try/try-nested-return", // Requires compat behavior on nested try
+  "nested-try/try-nested-return-indirect", // Requires compat behavior on nested try
+  "nested-try/try-nested-return-ok-somehow", // Requires compat behavior on nested try
 ]);
 // `WHITELIST` can be used to only enable a few tests.
 const WHITELIST: ReadonlySet<string> = new Set([
@@ -75,6 +87,15 @@ describe("avm1", function () {
       globalObject.ownProperties.set("blendMode", AvmPropDescriptor.data(AvmValue.fromHostString("normal")));
       globalObject.ownProperties.set("cacheAsBitmap", AvmPropDescriptor.data(AVM_FALSE));
       globalObject.ownProperties.set("_currentframe", AvmPropDescriptor.data(AvmValue.fromHostNumber(1)));
+      globalObject.ownProperties.set("_framesloaded", AvmPropDescriptor.data(AvmValue.fromHostNumber(2)));
+      globalObject.ownProperties.set("_totalframes", AvmPropDescriptor.data(AvmValue.fromHostNumber(2)));
+      globalObject.ownProperties.set("print", AvmPropDescriptor.data(bindingFromHostFunction(
+        vm.realm.functionPrototype,
+        (ctx: HostCallContext): AvmValue => {
+          host.trace(ctx.toHostString(ctx.getArg(0)));
+          return AVM_UNDEFINED;
+        },
+      )));
 
       const host: LoggedHost = new LoggedHost();
 

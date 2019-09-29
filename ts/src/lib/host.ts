@@ -104,6 +104,6 @@ export class LoggedTarget implements Target {
   }
 
   getFrameLoadingProgress(): { loaded: UintSize; total: UintSize } {
-    return {loaded: 1, total: 4};
+    return {loaded: 2, total: 2};
   }
 }
