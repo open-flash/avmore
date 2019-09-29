@@ -24,7 +24,6 @@ const AVM1_SAMPLES_ROOT: string = sysPath.join(REPO_ROOT, "tests", "avm1");
 const BLACKLIST: ReadonlySet<string> = new Set([
   "avm1-bytes/constant-on-stack-definition", // Reads data from the uninitialized constant pool
   "avm1-bytes/constant-without-pool", // Reads data from the uninitialized constant pool
-  "avm1-bytes/corrupted-push", // The parser does not supported corrupted actions yet
   "nested-try/try-nested-return", // Requires compat behavior on nested try
   "nested-try/try-nested-return-indirect", // Requires compat behavior on nested try
   "nested-try/try-nested-return-ok-somehow", // Requires compat behavior on nested try

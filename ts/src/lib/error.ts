@@ -24,6 +24,14 @@ export class TargetHasNoPropertyWarning {
   }
 }
 
+export class CorruptDataWarning {
+  constructor() {}
+
+  toString(): string {
+    return "Warning: Failed to parse corrupt data.";
+  }
+}
+
 export class UncaughtException {
   public readonly valueString: string;
 

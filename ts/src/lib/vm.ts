@@ -37,7 +37,12 @@ import {
 } from "./avm-value";
 import { AvmConstantPool } from "./constant-pool";
 import { ActionContext, RunBudget, StackContext } from "./context";
-import { ReferenceToUndeclaredVariableWarning, TargetHasNoPropertyWarning, UncaughtException } from "./error";
+import {
+  CorruptDataWarning,
+  ReferenceToUndeclaredVariableWarning,
+  TargetHasNoPropertyWarning,
+  UncaughtException
+} from "./error";
 import {
   AvmCallResult,
   AvmFunction,
@@ -338,7 +343,8 @@ export class ExecutionContext implements ActionContext {
       let flowResult: FlowResult;
       switch (block.type) {
         case CfgBlockType.Error:
-          throw new Error("CorruptedData");
+          this.host.warn(new CorruptDataWarning());
+          throw new AbortSignal();
         case CfgBlockType.If: {
           const test: boolean = this.toHostBoolean(this.pop());
           const target: NullableCfgLabel = test ? block.ifTrue : block.ifFalse;
