@@ -9,6 +9,7 @@ import { CfgBlock } from "avm1-types/cfg-block";
 import { CfgBlockType } from "avm1-types/cfg-block-type";
 import { CfgTryBlock } from "avm1-types/cfg-blocks/cfg-try-block";
 import { CfgWaitForFrameBlock } from "avm1-types/cfg-blocks/cfg-wait-for-frame-block";
+import { CfgWaitForFrame2Block } from "avm1-types/cfg-blocks/cfg-wait-for-frame2-block";
 import { NullableCfgLabel } from "avm1-types/cfg-label";
 import { Incident } from "incident";
 import { Sint32, Uint32, UintSize } from "semantic-types";
@@ -360,6 +361,10 @@ export class ExecutionContext implements ActionContext {
         }
         case CfgBlockType.WaitForFrame: {
           flowResult = this.flowWaitForFrameBlock(block);
+          break;
+        }
+        case CfgBlockType.WaitForFrame2: {
+          flowResult = this.flowWaitForFrame2Block(block);
           break;
         }
         default: {
@@ -1593,14 +1598,38 @@ export class ExecutionContext implements ActionContext {
     }
     const progress: { loaded: UintSize; total: UintSize } = target.getFrameLoadingProgress();
 
-    // - `action.frame` is 0-indexed.
-    // - `progress.loaded` returns values in `[0, progress.total]` (inclusive) but since we are
-    //   running the script, the first frame should be loaded and we can expected
-    //   `progress.loaded >= 1` (or maybe we may get `0` using `setTarget` shenanigans?)
+    // - `action.frame` is 0-indexed (different from `WaitForFrame2`).
+    // - `progress.loaded` returns values in `[0, progress.total]` (inclusive) it can be `0` (or
+    //    generally less than `_currentframe`) in streaming mode when running scripts for a frame
+    //    that is still loading.
     // - `progress.loaded >= progress.total` implies `isRequestedFrameLoaded` regardless of frame
     //   index.
 
     const isLoaded: boolean = progress.loaded >= progress.total || progress.loaded > block.frame;
+
+    const jumpTarget: NullableCfgLabel = isLoaded ? block.ifLoaded : block.ifNotLoaded;
+    return {type: FlowResultType.Simple, target: jumpTarget};
+  }
+
+  private flowWaitForFrame2Block(block: CfgWaitForFrame2Block): FlowResult {
+    if (this.target === null) {
+      throw new Error("MissingTargetId: Cannot run WaitForFrame2");
+    }
+    const target: Target | undefined = this.host.getTarget(this.target);
+    if (target === undefined) {
+      throw new Error("TargetNotFound: Cannot run WaitForFrame2");
+    }
+    const frame: Uint32 = this.toHostUint32(this.pop());
+    const progress: { loaded: UintSize; total: UintSize } = target.getFrameLoadingProgress();
+
+    // - `frame` is 1-indexed (different from `WaitForFrame`).
+    // - `progress.loaded` returns values in `[0, progress.total]` (inclusive) it can be `0` (or
+    //    generally less than `_currentframe`) in streaming mode when running scripts for a frame
+    //    that is still loading.
+    // - `progress.loaded >= progress.total` implies `isRequestedFrameLoaded` regardless of frame
+    //   index.
+
+    const isLoaded: boolean = progress.loaded >= progress.total || progress.loaded >= frame;
 
     const jumpTarget: NullableCfgLabel = isLoaded ? block.ifLoaded : block.ifNotLoaded;
     return {type: FlowResultType.Simple, target: jumpTarget};
