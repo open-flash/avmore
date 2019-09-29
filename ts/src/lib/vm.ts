@@ -2,7 +2,7 @@
 
 import { cfgFromBytes } from "avm1-parser";
 import { ActionType } from "avm1-types/action-type";
-import { GotoFrame, SetTarget } from "avm1-types/actions";
+import { GotoFrame, GotoLabel, SetTarget } from "avm1-types/actions";
 import { CatchTargetType } from "avm1-types/catch-targets/_type";
 import { CfgAction } from "avm1-types/cfg-action";
 import { CfgBlock } from "avm1-types/cfg-block";
@@ -1157,6 +1157,9 @@ export class ExecutionContext implements ActionContext {
       case ActionType.GotoFrame:
         this.execGotoFrame(action);
         break;
+      case ActionType.GotoLabel:
+        this.execGotoLabel(action);
+        break;
       case ActionType.Greater:
         this.execGreater();
         break;
@@ -1215,6 +1218,19 @@ export class ExecutionContext implements ActionContext {
     const target: Target | undefined = this.host.getTarget(this.target);
     if (target !== undefined) {
       target.gotoFrame(action.frame);
+    } else {
+      console.warn("TargetNotFound");
+    }
+  }
+
+  private execGotoLabel(action: GotoLabel): void {
+    if (this.target === null) {
+      console.warn("NoCurrentTarget");
+      return;
+    }
+    const target: Target | undefined = this.host.getTarget(this.target);
+    if (target !== undefined) {
+      target.gotoLabel(action.label);
     } else {
       console.warn("TargetNotFound");
     }

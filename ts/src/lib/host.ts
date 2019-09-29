@@ -20,6 +20,8 @@ export interface Target {
 
   gotoFrame(frameIndex: UintSize): void;
 
+  gotoLabel(label: string): void;
+
   getFrameLoadingProgress(): { loaded: UintSize; total: UintSize };
 }
 
@@ -101,6 +103,10 @@ export class LoggedTarget implements Target {
 
   gotoFrame(frameIndex: UintSize): void {
     this.logs.push(`gotoFrame: ${frameIndex}`);
+  }
+
+  gotoLabel(label: string): void {
+    this.logs.push(`gotoLabel: ${label}`);
   }
 
   getFrameLoadingProgress(): { loaded: UintSize; total: UintSize } {
