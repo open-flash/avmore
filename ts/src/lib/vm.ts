@@ -10,6 +10,7 @@ import { CfgBlockType } from "avm1-types/cfg-block-type";
 import { CfgTryBlock } from "avm1-types/cfg-blocks/cfg-try-block";
 import { CfgWaitForFrameBlock } from "avm1-types/cfg-blocks/cfg-wait-for-frame-block";
 import { CfgWaitForFrame2Block } from "avm1-types/cfg-blocks/cfg-wait-for-frame2-block";
+import { CfgWithBlock } from "avm1-types/cfg-blocks/cfg-with-block";
 import { NullableCfgLabel } from "avm1-types/cfg-label";
 import { Incident } from "incident";
 import { Sint32, Uint32, UintSize } from "semantic-types";
@@ -367,8 +368,12 @@ export class ExecutionContext implements ActionContext {
           flowResult = this.flowWaitForFrame2Block(block);
           break;
         }
+        case CfgBlockType.With: {
+          flowResult = this.flowWithBlock(block);
+          break;
+        }
         default: {
-          throw new Error(`NotImplemented: Support for block type ${CfgBlockType[block.type]}`);
+          throw new Error(`NotImplemented: Support for block type ${block}`);
         }
       }
       this.budget.totalActions++;
@@ -1586,6 +1591,25 @@ export class ExecutionContext implements ActionContext {
     }
 
     return flowResult;
+  }
+
+  private flowWithBlock(block: CfgWithBlock): FlowResult {
+    const scopeTarget: AvmValue = this.pop();
+    const withScope: DynamicScope = new DynamicScope(scopeTarget, this.scope);
+
+    const withCtx: ExecutionContext = new ExecutionContext(
+      this.vm,
+      this.host,
+      this.budget,
+      this.activation,
+      withScope,
+      this.stack,
+      this.registers,
+      this.target,
+      this.thisArg,
+    );
+
+    return withCtx.runCfg(new CfgTable(block.with));
   }
 
   private flowWaitForFrameBlock(block: CfgWaitForFrameBlock): FlowResult {
