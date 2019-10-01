@@ -9,6 +9,7 @@ import {
 } from "../avm-value";
 import { CallableType, HostCallContext } from "../function";
 import { bindingFromHostFunction } from "../realm";
+import { CoreRealm } from "./core";
 
 export interface BooleanRealm {
   boolean: AvmObject;
@@ -17,16 +18,18 @@ export interface BooleanRealm {
   booleanPrototypeValueOf: AvmObject;
 }
 
-export function createBooleanRealm(funcProto: AvmSimpleObject): BooleanRealm {
-  const _booleanPrototypeToString: AvmObject = bindingFromHostFunction(funcProto, booleanPrototypeToString);
-  const _booleanPrototypeValueOf: AvmObject = bindingFromHostFunction(funcProto, booleanPrototypeValueOf);
+export function createBooleanRealm(core: CoreRealm): BooleanRealm {
+  // tslint:disable:max-line-length
+  const _booleanPrototypeToString: AvmObject = bindingFromHostFunction(core.functionPrototype, booleanPrototypeToString);
+  const _booleanPrototypeValueOf: AvmObject = bindingFromHostFunction(core.functionPrototype, booleanPrototypeValueOf);
+  // tslint:enable
 
   // Boolean.prototype
   const booleanPrototype: AvmSimpleObject = {
     type: AvmValueType.Object,
     external: false,
     class: "Object",
-    prototype: funcProto,
+    prototype: core.objectPrototype,
     ownProperties: new Map([
       ["toString", AvmPropDescriptor.data(_booleanPrototypeToString)],
       ["valueOf", AvmPropDescriptor.data(_booleanPrototypeValueOf)],
@@ -39,7 +42,7 @@ export function createBooleanRealm(funcProto: AvmSimpleObject): BooleanRealm {
     type: AvmValueType.Object,
     external: false,
     class: "Function",
-    prototype: funcProto,
+    prototype: core.functionPrototype,
     ownProperties: new Map([
       ["prototype", AvmPropDescriptor.data(booleanPrototype)],
     ]),

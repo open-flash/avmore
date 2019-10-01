@@ -1,6 +1,7 @@
 import { AvmObject, AvmPropDescriptor, AvmSimpleObject, AvmValue, AvmValueType } from "../avm-value";
 import { HostCallContext } from "../function";
 import { bindingFromHostFunction } from "../realm";
+import { CoreRealm } from "./core";
 
 // > 15.8  The Math Object
 // >
@@ -41,32 +42,32 @@ export interface MathRealm {
   mathTan: AvmObject;
 }
 
-export function createMathRealm(funcProto: AvmSimpleObject, objectProto: AvmSimpleObject): MathRealm {
-  const _mathAbs: AvmObject = bindingFromHostFunction(funcProto, mathAbs);
-  const _mathAcos: AvmObject = bindingFromHostFunction(funcProto, mathAcos);
-  const _mathAsin: AvmObject = bindingFromHostFunction(funcProto, mathAsin);
-  const _mathAtan: AvmObject = bindingFromHostFunction(funcProto, mathAtan);
-  const _mathAtan2: AvmObject = bindingFromHostFunction(funcProto, mathAtan2);
-  const _mathCeil: AvmObject = bindingFromHostFunction(funcProto, mathCeil);
-  const _mathCos: AvmObject = bindingFromHostFunction(funcProto, mathCos);
-  const _mathExp: AvmObject = bindingFromHostFunction(funcProto, mathExp);
-  const _mathFloor: AvmObject = bindingFromHostFunction(funcProto, mathFloor);
-  const _mathLog: AvmObject = bindingFromHostFunction(funcProto, mathLog);
-  const _mathMax: AvmObject = bindingFromHostFunction(funcProto, mathMax);
-  const _mathMin: AvmObject = bindingFromHostFunction(funcProto, mathMin);
-  const _mathPow: AvmObject = bindingFromHostFunction(funcProto, mathPow);
-  const _mathRandom: AvmObject = bindingFromHostFunction(funcProto, mathRandom);
-  const _mathRound: AvmObject = bindingFromHostFunction(funcProto, mathRound);
-  const _mathSin: AvmObject = bindingFromHostFunction(funcProto, mathSin);
-  const _mathSqrt: AvmObject = bindingFromHostFunction(funcProto, mathSqrt);
-  const _mathTan: AvmObject = bindingFromHostFunction(funcProto, mathTan);
+export function createMathRealm(core: CoreRealm): MathRealm {
+  const _mathAbs: AvmObject = bindingFromHostFunction(core.functionPrototype, mathAbs);
+  const _mathAcos: AvmObject = bindingFromHostFunction(core.functionPrototype, mathAcos);
+  const _mathAsin: AvmObject = bindingFromHostFunction(core.functionPrototype, mathAsin);
+  const _mathAtan: AvmObject = bindingFromHostFunction(core.functionPrototype, mathAtan);
+  const _mathAtan2: AvmObject = bindingFromHostFunction(core.functionPrototype, mathAtan2);
+  const _mathCeil: AvmObject = bindingFromHostFunction(core.functionPrototype, mathCeil);
+  const _mathCos: AvmObject = bindingFromHostFunction(core.functionPrototype, mathCos);
+  const _mathExp: AvmObject = bindingFromHostFunction(core.functionPrototype, mathExp);
+  const _mathFloor: AvmObject = bindingFromHostFunction(core.functionPrototype, mathFloor);
+  const _mathLog: AvmObject = bindingFromHostFunction(core.functionPrototype, mathLog);
+  const _mathMax: AvmObject = bindingFromHostFunction(core.functionPrototype, mathMax);
+  const _mathMin: AvmObject = bindingFromHostFunction(core.functionPrototype, mathMin);
+  const _mathPow: AvmObject = bindingFromHostFunction(core.functionPrototype, mathPow);
+  const _mathRandom: AvmObject = bindingFromHostFunction(core.functionPrototype, mathRandom);
+  const _mathRound: AvmObject = bindingFromHostFunction(core.functionPrototype, mathRound);
+  const _mathSin: AvmObject = bindingFromHostFunction(core.functionPrototype, mathSin);
+  const _mathSqrt: AvmObject = bindingFromHostFunction(core.functionPrototype, mathSqrt);
+  const _mathTan: AvmObject = bindingFromHostFunction(core.functionPrototype, mathTan);
 
   // Math
   const _math: AvmSimpleObject = {
     type: AvmValueType.Object,
     external: false,
     class: "Math",
-    prototype: objectProto,
+    prototype: core.objectPrototype,
     ownProperties: new Map([
       ["abs", AvmPropDescriptor.data(_mathAbs)],
       ["acos", AvmPropDescriptor.data(_mathAcos)],

@@ -14,11 +14,11 @@ export interface Realm extends ArrayRealm, BooleanRealm, CoreRealm, MathRealm, N
 
 export function createRealm(): Realm {
   const coreRealm: CoreRealm = createCoreRealm();
-  const arrayRealm: ArrayRealm = createArrayRealm(coreRealm.functionPrototype);
-  const booleanRealm: BooleanRealm = createBooleanRealm(coreRealm.functionPrototype);
-  const mathRealm: MathRealm = createMathRealm(coreRealm.functionPrototype, coreRealm.objectPrototype);
-  const numberRealm: NumberRealm = createNumberRealm(coreRealm.functionPrototype);
-  const stringRealm: StringRealm = createStringRealm(coreRealm.functionPrototype);
+  const arrayRealm: ArrayRealm = createArrayRealm(coreRealm);
+  const booleanRealm: BooleanRealm = createBooleanRealm(coreRealm);
+  const mathRealm: MathRealm = createMathRealm(coreRealm);
+  const numberRealm: NumberRealm = createNumberRealm(coreRealm);
+  const stringRealm: StringRealm = createStringRealm(coreRealm);
 
   const globals: Map<string, AvmValue> = new Map([
     ["Array", arrayRealm.array],

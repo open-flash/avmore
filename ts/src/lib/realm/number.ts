@@ -12,6 +12,7 @@ import {
 } from "../avm-value";
 import { CallableType, HostCallContext } from "../function";
 import { bindingFromHostFunction } from "../realm";
+import { CoreRealm } from "./core";
 
 export interface NumberRealm {
   number: AvmObject;
@@ -20,16 +21,16 @@ export interface NumberRealm {
   numberPrototypeValueOf: AvmObject;
 }
 
-export function createNumberRealm(funcProto: AvmSimpleObject): NumberRealm {
-  const _numberPrototypeToString: AvmObject = bindingFromHostFunction(funcProto, numberPrototypeToString);
-  const _numberPrototypeValueOf: AvmObject = bindingFromHostFunction(funcProto, numberPrototypeValueOf);
+export function createNumberRealm(core: CoreRealm): NumberRealm {
+  const _numberPrototypeToString: AvmObject = bindingFromHostFunction(core.functionPrototype, numberPrototypeToString);
+  const _numberPrototypeValueOf: AvmObject = bindingFromHostFunction(core.functionPrototype, numberPrototypeValueOf);
 
   // Number.prototype
   const numberPrototype: AvmSimpleObject = {
     type: AvmValueType.Object,
     external: false,
     class: "Object",
-    prototype: funcProto,
+    prototype: core.objectPrototype,
     ownProperties: new Map([
       ["toString", AvmPropDescriptor.data(_numberPrototypeToString)],
       ["valueOf", AvmPropDescriptor.data(_numberPrototypeValueOf)],
@@ -42,7 +43,7 @@ export function createNumberRealm(funcProto: AvmSimpleObject): NumberRealm {
     type: AvmValueType.Object,
     external: false,
     class: "Function",
-    prototype: funcProto,
+    prototype: core.functionPrototype,
     ownProperties: new Map([
       ["prototype", AvmPropDescriptor.data(numberPrototype)],
       ["MAX_VALUE", AvmPropDescriptor.data(AVM_MAX_VALUE)],

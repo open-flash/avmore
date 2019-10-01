@@ -10,6 +10,7 @@ import {
 } from "../avm-value";
 import { AvmCallResult, CallableType, CallType, HostCallContext } from "../function";
 import { bindingFromHostFunction } from "../realm";
+import { CoreRealm } from "./core";
 
 // > 15.4 Array Objects
 // >
@@ -41,25 +42,27 @@ export interface ArrayRealm {
   arrayPrototypeUnshift: AvmObject;
 }
 
-export function createArrayRealm(funcProto: AvmSimpleObject): ArrayRealm {
-  const _arrayPrototypeToString: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypeToString);
-  const _arrayPrototypeToLocaleString: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypeToLocaleString);
-  const _arrayPrototypeJoin: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypeJoin);
-  const _arrayPrototypePop: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypePop);
-  const _arrayPrototypePush: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypePush);
-  const _arrayPrototypeReverse: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypeReverse);
-  const _arrayPrototypeShift: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypeShift);
-  const _arrayPrototypeSlice: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypeSlice);
-  const _arrayPrototypeSort: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypeSort);
-  const _arrayPrototypeSplice: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypeSplice);
-  const _arrayPrototypeUnshift: AvmObject = bindingFromHostFunction(funcProto, arrayPrototypeUnshift);
+export function createArrayRealm(core: CoreRealm): ArrayRealm {
+  // tslint:disable:max-line-length
+  const _arrayPrototypeToString: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypeToString);
+  const _arrayPrototypeToLocaleString: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypeToLocaleString);
+  const _arrayPrototypeJoin: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypeJoin);
+  const _arrayPrototypePop: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypePop);
+  const _arrayPrototypePush: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypePush);
+  const _arrayPrototypeReverse: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypeReverse);
+  const _arrayPrototypeShift: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypeShift);
+  const _arrayPrototypeSlice: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypeSlice);
+  const _arrayPrototypeSort: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypeSort);
+  const _arrayPrototypeSplice: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypeSplice);
+  const _arrayPrototypeUnshift: AvmObject = bindingFromHostFunction(core.functionPrototype, arrayPrototypeUnshift);
+  // tslint:enable
 
   // Array.prototype
   const arrayPrototype: AvmSimpleObject = {
     type: AvmValueType.Object,
     external: false,
     class: "Object",
-    prototype: funcProto,
+    prototype: core.objectPrototype,
     ownProperties: new Map([
       ["toString", AvmPropDescriptor.data(_arrayPrototypeToString)],
       ["toLocaleString", AvmPropDescriptor.data(_arrayPrototypeToLocaleString)],
@@ -81,7 +84,7 @@ export function createArrayRealm(funcProto: AvmSimpleObject): ArrayRealm {
     type: AvmValueType.Object,
     external: false,
     class: "Function",
-    prototype: funcProto,
+    prototype: core.functionPrototype,
     ownProperties: new Map([
       ["prototype", AvmPropDescriptor.data(arrayPrototype)],
     ]),

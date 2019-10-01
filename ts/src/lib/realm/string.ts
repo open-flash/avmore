@@ -1,6 +1,7 @@
 import { AVM_EMPTY_STRING, AvmObject, AvmPropDescriptor, AvmSimpleObject, AvmValueType } from "../avm-value";
 import { AvmCallResult, CallableType, CallType, HostCallContext } from "../function";
 import { bindingFromHostFunction } from "../realm";
+import { CoreRealm } from "./core";
 
 // > 15.5 String Objects
 
@@ -23,27 +24,29 @@ export interface StringRealm {
   stringPrototypeToUpperCase: AvmObject;
 }
 
-export function createStringRealm(funcProto: AvmSimpleObject): StringRealm {
-  const _stringPrototypeToString: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeToString);
-  const _stringPrototypeValueOf: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeValueOf);
-  const _stringPrototypeCharAt: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeCharAt);
-  const _stringPrototypeCharCodeAt: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeCharCodeAt);
-  const _stringPrototypeConcat: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeConcat);
-  const _stringPrototypeIndexOf: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeIndexOf);
-  const _stringPrototypeLastIndexOf: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeLastIndexOf);
-  const _stringPrototypeSlice: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeSlice);
-  const _stringPrototypeSplit: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeSplit);
-  const _stringPrototypeSubstr: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeSubstr);
-  const _stringPrototypeSubstring: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeSubstring);
-  const _stringPrototypeToLowerCase: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeToLowerCase);
-  const _stringPrototypeToUpperCase: AvmObject = bindingFromHostFunction(funcProto, stringPrototypeToUpperCase);
+export function createStringRealm(core: CoreRealm): StringRealm {
+  // tslint:disable:max-line-length
+  const _stringPrototypeToString: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeToString);
+  const _stringPrototypeValueOf: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeValueOf);
+  const _stringPrototypeCharAt: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeCharAt);
+  const _stringPrototypeCharCodeAt: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeCharCodeAt);
+  const _stringPrototypeConcat: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeConcat);
+  const _stringPrototypeIndexOf: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeIndexOf);
+  const _stringPrototypeLastIndexOf: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeLastIndexOf);
+  const _stringPrototypeSlice: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeSlice);
+  const _stringPrototypeSplit: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeSplit);
+  const _stringPrototypeSubstr: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeSubstr);
+  const _stringPrototypeSubstring: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeSubstring);
+  const _stringPrototypeToLowerCase: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeToLowerCase);
+  const _stringPrototypeToUpperCase: AvmObject = bindingFromHostFunction(core.functionPrototype, stringPrototypeToUpperCase);
+  // tslint:enable
 
   // String.prototype
   const stringPrototype: AvmSimpleObject = {
     type: AvmValueType.Object,
     external: false,
     class: "Object",
-    prototype: funcProto,
+    prototype: core.objectPrototype,
     ownProperties: new Map([
       ["toString", AvmPropDescriptor.data(_stringPrototypeToString)],
       ["valueOf", AvmPropDescriptor.data(_stringPrototypeValueOf)],
@@ -62,14 +65,14 @@ export function createStringRealm(funcProto: AvmSimpleObject): StringRealm {
     callable: undefined,
   };
 
-  const _stringFromCharCode: AvmObject = bindingFromHostFunction(funcProto, stringFromCharCode);
+  const _stringFromCharCode: AvmObject = bindingFromHostFunction(core.functionPrototype, stringFromCharCode);
 
   // String
   const _string: AvmSimpleObject = {
     type: AvmValueType.Object,
     external: false,
     class: "Function",
-    prototype: funcProto,
+    prototype: core.functionPrototype,
     ownProperties: new Map([
       ["prototype", AvmPropDescriptor.data(stringPrototype)],
       ["fromCharCode", AvmPropDescriptor.data(_stringFromCharCode)],
