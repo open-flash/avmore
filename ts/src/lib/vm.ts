@@ -41,7 +41,7 @@ import {
   CorruptDataWarning,
   ReferenceToUndeclaredVariableWarning,
   TargetHasNoPropertyWarning,
-  UncaughtException
+  UncaughtException,
 } from "./error";
 import {
   AvmCallResult,

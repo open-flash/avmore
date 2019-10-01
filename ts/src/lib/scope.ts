@@ -70,12 +70,12 @@ abstract class BaseScope {
   protected abstract hasLocal(ctx: BaseContext, varName: string): boolean;
 }
 
+// TODO: Check how it interracts with `__resolve`, getters and prototype.
 /**
  * A scope backed by an object, as defined by the spec.
  *
  * Used as the `MovieClip` (root) scope, `with` statements, etc.
  */
-// TODO: Check how it interracts with `__resolve`, getters and prototype.
 export class DynamicScope extends BaseScope {
   readonly type: ScopeType.Dynamic;
   readonly parent?: Scope;

@@ -136,5 +136,11 @@ export interface ActionContext extends BaseContext, RegisterContext, ScopeContex
   ): AvmSimpleObject;
 }
 
+// export interface NatSlotContext {
+//   getNatSlot<T>(target: AvmValue, slot: NatSlot<T>): T | undefined;
+//
+//   setNatSlot<T>(target: AvmValue, slot: NatSlot<T>, value: T): void;
+// }
+
 // export interface CallContext extends BaseContext {
 // }
