@@ -66,15 +66,17 @@ export type MovieId = number;
 
 export class Vm {
   public readonly realm: Realm;
+  public readonly host: Host;
   public readonly constantPool: AvmConstantPool;
 
   private nextScriptId: number;
   private readonly scriptsById: Map<Avm1ScriptId, Avm1Script>;
 
-  constructor() {
+  constructor(host: Host) {
+    this.realm = createRealm();
+    this.host = host;
     this.nextScriptId = 0;
     this.scriptsById = new Map();
-    this.realm = createRealm();
     this.constantPool = new AvmConstantPool();
   }
 
@@ -91,13 +93,13 @@ export class Vm {
     return id;
   }
 
-  runToCompletion(scriptId: Avm1ScriptId, host: Host, maxActions: number = 1000): void {
+  runToCompletion(scriptId: Avm1ScriptId, maxActions: number = 1000): void {
     const script: Avm1Script | undefined = this.scriptsById.get(scriptId);
     if (script === undefined) {
       throw new Error(`ScriptNotFound: ${scriptId}`);
     }
     const budget: RunBudget = {maxActions, totalActions: 0};
-    ExecutionContext.runScript(this, host, budget, script);
+    ExecutionContext.runScript(this, budget, script);
   }
 
   public newExternal(handler: AvmExternalHandler): AvmExternalObject {
@@ -227,7 +229,6 @@ class AbortSignal extends Signal {
 export class ExecutionContext implements ActionContext {
   // Global context
   private readonly vm: Vm;
-  private readonly host: Host;
 
   // Run context
   private readonly budget: RunBudget;
@@ -245,7 +246,6 @@ export class ExecutionContext implements ActionContext {
 
   constructor(
     vm: Vm,
-    host: Host,
     budget: RunBudget,
     activation: Activation,
     scope: Scope,
@@ -255,7 +255,6 @@ export class ExecutionContext implements ActionContext {
     thisArg: AvmObject | AvmUndefined,
   ) {
     this.vm = vm;
-    this.host = host;
     this.budget = budget;
     this.activation = activation;
     this.scope = scope;
@@ -266,7 +265,7 @@ export class ExecutionContext implements ActionContext {
     this.missingPropertyDetector = new MissingPropertyDetector();
   }
 
-  public static runScript(vm: Vm, host: Host, budget: RunBudget, script: Avm1Script): void {
+  public static runScript(vm: Vm, budget: RunBudget, script: Avm1Script): void {
     const globalScope: StaticScope = new StaticScope(undefined);
     for (const [globalName, globalValue] of vm.realm.globals) {
       globalScope.variables.set(globalName, globalValue);
@@ -281,7 +280,7 @@ export class ExecutionContext implements ActionContext {
     const target: TargetId | null = script.target; // Initialize with default target
     let thisArg: AvmObject | AvmUndefined = AVM_UNDEFINED;
     if (target !== null) {
-      const resolvedTarget: Target | undefined = host.getTarget(target);
+      const resolvedTarget: Target | undefined = vm.host.getTarget(target);
       if (resolvedTarget !== undefined) {
         thisArg = resolvedTarget.getThis();
       }
@@ -289,7 +288,6 @@ export class ExecutionContext implements ActionContext {
 
     const ctx: ExecutionContext = new ExecutionContext(
       vm,
-      host,
       budget,
       activation,
       scope,
@@ -304,7 +302,7 @@ export class ExecutionContext implements ActionContext {
       if (flowResult.type === FlowResultType.Throw) {
         // TODO: Handle erors thrown when converting this error to string
         const valueString: string = ctx.toHostString(flowResult.value);
-        host.warn(new UncaughtException(valueString));
+        vm.host.warn(new UncaughtException(valueString));
       }
     } catch (e) {
       if (e instanceof AbortSignal) {
@@ -343,7 +341,7 @@ export class ExecutionContext implements ActionContext {
       let flowResult: FlowResult;
       switch (block.type) {
         case CfgBlockType.Error:
-          this.host.warn(new CorruptDataWarning());
+          this.vm.host.warn(new CorruptDataWarning());
           throw new AbortSignal();
         case CfgBlockType.If: {
           const test: boolean = this.toHostBoolean(this.pop());
@@ -512,7 +510,7 @@ export class ExecutionContext implements ActionContext {
     }
     const targetName: string | undefined = this.missingPropertyDetector.getVarName();
     if (targetName !== undefined) {
-      this.host.warn(new TargetHasNoPropertyWarning(targetName, key));
+      this.vm.host.warn(new TargetHasNoPropertyWarning(targetName, key));
     }
     return AVM_UNDEFINED;
   }
@@ -773,7 +771,7 @@ export class ExecutionContext implements ActionContext {
     if (value !== undefined) {
       return value;
     } else {
-      this.host.warn(new ReferenceToUndeclaredVariableWarning(varName));
+      this.vm.host.warn(new ReferenceToUndeclaredVariableWarning(varName));
       return AVM_UNDEFINED;
     }
   }
@@ -1231,7 +1229,7 @@ export class ExecutionContext implements ActionContext {
       console.warn("NoCurrentTarget");
       return;
     }
-    const target: Target | undefined = this.host.getTarget(this.target);
+    const target: Target | undefined = this.vm.host.getTarget(this.target);
     if (target !== undefined) {
       target.gotoFrame(action.frame);
     } else {
@@ -1244,7 +1242,7 @@ export class ExecutionContext implements ActionContext {
       console.warn("NoCurrentTarget");
       return;
     }
-    const target: Target | undefined = this.host.getTarget(this.target);
+    const target: Target | undefined = this.vm.host.getTarget(this.target);
     if (target !== undefined) {
       target.gotoLabel(action.label);
     } else {
@@ -1294,7 +1292,7 @@ export class ExecutionContext implements ActionContext {
       console.warn("NoCurrentTarget");
       return;
     }
-    const target: Target | undefined = this.host.getTarget(this.target);
+    const target: Target | undefined = this.vm.host.getTarget(this.target);
     if (target !== undefined) {
       target.play();
     } else {
@@ -1315,7 +1313,7 @@ export class ExecutionContext implements ActionContext {
       console.warn("NoCurrentTarget");
       return;
     }
-    const target: Target | undefined = this.host.getTarget(this.target);
+    const target: Target | undefined = this.vm.host.getTarget(this.target);
     if (target !== undefined) {
       target.stop();
     } else {
@@ -1336,7 +1334,7 @@ export class ExecutionContext implements ActionContext {
     const messageStr: AvmString = message.type === AvmValueType.Undefined
       ? AvmValue.fromHostString("undefined")
       : this.toAvmString(message);
-    this.host.trace(messageStr.value);
+    this.vm.host.trace(messageStr.value);
   }
 
   private toUintSize(avmValue: AvmValue): number {
@@ -1499,7 +1497,6 @@ export class ExecutionContext implements ActionContext {
 
     const ctx: ExecutionContext = new ExecutionContext(
       this.vm,
-      this.host,
       this.budget,
       activation,
       scope,
@@ -1605,7 +1602,6 @@ export class ExecutionContext implements ActionContext {
 
     const withCtx: ExecutionContext = new ExecutionContext(
       this.vm,
-      this.host,
       this.budget,
       this.activation,
       withScope,
@@ -1622,7 +1618,7 @@ export class ExecutionContext implements ActionContext {
     if (this.target === null) {
       throw new Error("MissingTargetId: Cannot run WaitForFrame");
     }
-    const target: Target | undefined = this.host.getTarget(this.target);
+    const target: Target | undefined = this.vm.host.getTarget(this.target);
     if (target === undefined) {
       throw new Error("TargetNotFound: Cannot run WaitForFrame");
     }
@@ -1645,7 +1641,7 @@ export class ExecutionContext implements ActionContext {
     if (this.target === null) {
       throw new Error("MissingTargetId: Cannot run WaitForFrame2");
     }
-    const target: Target | undefined = this.host.getTarget(this.target);
+    const target: Target | undefined = this.vm.host.getTarget(this.target);
     if (target === undefined) {
       throw new Error("TargetNotFound: Cannot run WaitForFrame2");
     }

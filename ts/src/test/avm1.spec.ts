@@ -7,7 +7,7 @@ import {
   AVM_UNDEFINED,
   AvmPropDescriptor,
   AvmSimpleObject,
-  AvmValue
+  AvmValue,
 } from "../lib/avm-value";
 import { HostCallContext } from "../lib/function";
 import { LoggedHost } from "../lib/host";
@@ -45,7 +45,8 @@ describe("avm1", function () {
       const inputBytes: Buffer = await readFile(sample.avm1Path);
       const expectedLogs: string = await readTextFile(sample.logPath);
 
-      const vm: Vm = new Vm();
+      const host: LoggedHost = new LoggedHost();
+      const vm: Vm = new Vm(host);
 
       const globalObject: AvmSimpleObject = vm.newObject();
       vm.realm.globals.set("_global", globalObject);
@@ -96,12 +97,10 @@ describe("avm1", function () {
         },
       )));
 
-      const host: LoggedHost = new LoggedHost();
-
       const targetId: TargetId = host.createTarget(globalObject);
 
       const scriptId: number = vm.createAvm1Script(inputBytes, targetId, globalObject);
-      vm.runToCompletion(scriptId, host);
+      vm.runToCompletion(scriptId);
 
       const actualLogs: string = host.logs.map(msg => `${msg}\n`).join("");
 

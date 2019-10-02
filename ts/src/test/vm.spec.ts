@@ -20,11 +20,11 @@ describe("Avmore", function () {
         {encoding: "UTF-8"},
       );
 
-      const vm: Vm = new Vm();
       const host: LoggedHost = new LoggedHost();
+      const vm: Vm = new Vm(host);
 
       const scriptId: number = vm.createAvm1Script(input, null, null);
-      vm.runToCompletion(scriptId, host);
+      vm.runToCompletion(scriptId);
 
       const actualLogs: string = host.logs.map(msg => `${msg}\n`).join("");
 
