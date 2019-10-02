@@ -9,7 +9,7 @@ import {
   AvmValue,
   AvmValueType,
 } from "./avm-value";
-import { BaseContext } from "./context";
+import { BaseContext, ThisContext } from "./context";
 import { Realm } from "./realm";
 import { Scope } from "./scope";
 import { Avm1Script, CfgTable } from "./script";
@@ -101,7 +101,7 @@ export const HostCallContext = {
   },
 };
 
-interface BaseHostCallContext extends BaseContext {
+interface BaseHostCallContext extends BaseContext, ThisContext {
   readonly callType: CallType;
   readonly thisArg: AvmObject | AvmUndefined;
   readonly args: ReadonlyArray<AvmValue>;
@@ -270,12 +270,16 @@ class HostCallContextImpl implements BaseHostCallContext {
     return this.ctx.bitwiseOr(left, right);
   }
 
+  strictEquals(left: AvmValue, right: AvmValue): AvmBoolean {
+    return this.ctx.strictEquals(left, right);
+  }
+
   getRealm(): Realm {
     return this.ctx.getRealm();
   }
 
   getThis(): AvmObject | AvmUndefined {
-    return this.ctx.getThis();
+    return this.thisArg;
   }
 
   throw(value: AvmValue): never {

@@ -80,15 +80,19 @@ export interface BaseContext {
 
   bitwiseOr(left: AvmValue, right: AvmValue): AvmNumber;
 
+  strictEquals(left: AvmValue, right: AvmValue): AvmBoolean;
+
   // Misc
 
   getRealm(): Realm;
 
-  getThis(): AvmObject | AvmUndefined;
-
   throw(value: AvmValue): never;
 
   abort(): never;
+}
+
+export interface ThisContext {
+  getThis(): AvmObject | AvmUndefined;
 }
 
 export interface ScopeContext {
@@ -121,7 +125,10 @@ export interface ConstantPoolContext {
   getConstant(index: UintSize): AvmString | AvmUndefined;
 }
 
-export interface ActionContext extends BaseContext, RegisterContext, ScopeContext, StackContext, ConstantPoolContext {
+export interface BaseCallContext extends BaseContext, ThisContext {
+}
+
+export interface ActionContext extends BaseContext, RegisterContext, ScopeContext, StackContext, ConstantPoolContext, ThisContext {
   createAvmFunction(
     name: string | undefined,
     registerCount: UintSize,

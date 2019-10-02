@@ -111,9 +111,6 @@ export type AvmValue = AvmPrimitive | AvmObject;
 
 // tslint:disable-next-line:typedef variable-name
 export const AvmValue = {
-  // fromAst(astValue: AstValue): AvmValue {
-  //
-  // }
   isPrimitive(value: AvmValue): value is AvmPrimitive {
     return value.type !== AvmValueType.Object;
   },
@@ -121,37 +118,12 @@ export const AvmValue = {
     return bool ? AVM_TRUE : AVM_FALSE;
   },
   fromHostNumber(value: number): AvmNumber {
-    // TODO: Normalize `-0` to `+0`
+    value = Object.is(value, -0) ? 0 : value;
+    // AVM1 always normalizes `-0` to `0`
     return {type: AvmValueType.Number, value};
   },
   fromHostString(value: string): AvmString {
     return {type: AvmValueType.String, value};
-  },
-  // Implementation of the ToNumber algorithm from ECMA 262-3, section 9.3
-  toAvmNumber(avmValue: AvmValue, _swfVersion: number): AvmNumber {
-    switch (avmValue.type) {
-      case AvmValueType.Undefined:
-        return AVM_NAN;
-      case AvmValueType.Null:
-        return AVM_ZERO;
-      case AvmValueType.Boolean:
-        return avmValue.value ? AVM_ONE : AVM_ZERO;
-      case AvmValueType.Number:
-        return avmValue;
-      default:
-        throw new Error("NotImplemented: Full `ToNumber` algorithm");
-    }
-  },
-  toAvmPrimitive(avmValue: AvmValue, _hint: any, _swfVersion: number): any {
-    switch (avmValue.type) {
-      case AvmValueType.Undefined:
-      case AvmValueType.Null:
-      case AvmValueType.Boolean:
-      case AvmValueType.Number:
-        return avmValue;
-      default:
-        throw new Error("NotImplemented: Full `ToPrimitive` algorithm");
-    }
   },
 };
 

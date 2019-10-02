@@ -116,6 +116,9 @@ export function action(ctx: ActionContext, action: CfgAction): void {
     case ActionType.StoreRegister:
       storeRegister(ctx, action);
       break;
+    case ActionType.StrictEquals:
+      strictEquals(ctx);
+      break;
     case ActionType.Subtract:
       subtract(ctx);
       break;
@@ -499,6 +502,12 @@ export function setVariable(ctx: ActionContext): void {
 export function storeRegister(ctx: ActionContext, action: StoreRegister): void {
   const value: AvmValue = ctx.peek();
   ctx.setReg(action.register, value);
+}
+
+export function strictEquals(ctx: ActionContext): void {
+  const right: AvmValue = ctx.pop();
+  const left: AvmValue = ctx.pop();
+  ctx.push(ctx.strictEquals(left, right));
 }
 
 export function subtract(ctx: ActionContext): void {
