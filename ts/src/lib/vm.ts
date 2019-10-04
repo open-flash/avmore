@@ -11,11 +11,12 @@ import {
   AvmValueType,
 } from "./avm-value";
 import { AvmConstantPool } from "./constant-pool";
-import { RunBudget } from "./context";
+import { BaseContext, RunBudget } from "./context";
 import { ExecutionContext } from "./execution-context";
 import { AvmFunction } from "./function";
 import { Host } from "./host";
 import { createRealm, Realm } from "./realm";
+import { NatRootRuntime } from "./runtime";
 import { Avm1Script, Avm1ScriptId, CfgTable } from "./script";
 
 export type TargetId = number;
@@ -59,6 +60,11 @@ export class Vm {
     }
     const budget: RunBudget = {maxActions, totalActions: 0};
     ExecutionContext.runScript(this, budget, script);
+  }
+
+  public withContext<R = void>(fn: (ctx: BaseContext) => R): R {
+    const budget: RunBudget = {maxActions: Infinity, totalActions: 0};
+    return fn(new NatRootRuntime(this, budget));
   }
 
   public newExternal(handler: AvmExternalHandler): AvmExternalObject {

@@ -896,3 +896,12 @@ export class NatCallRuntime extends BaseRuntime implements NatCallContext {
     return argIndex < this.args.length ? this.args[argIndex] : AVM_UNDEFINED;
   }
 }
+
+export class NatRootRuntime extends BaseRuntime implements BaseContext {
+  constructor(
+    vm: Vm,
+    budget: RunBudget,
+  ) {
+    super(vm, budget);
+  }
+}
