@@ -1,6 +1,6 @@
 // tslint:disable:max-classes-per-file max-file-line-count
 
-import { Sint32, Uint32 } from "semantic-types";
+import { Sint32, Uint32, UintSize } from "semantic-types";
 import {
   AVM_FALSE,
   AVM_NAN,
@@ -19,16 +19,17 @@ import {
   AvmUndefined,
   AvmValue,
   AvmValueType,
-} from "../avm-value";
-import { BaseContext, RunBudget } from "../context";
-import { FlowResult, FlowResultType } from "../flow-result";
-import { AvmCallResult, Callable, CallableType, CallType, HostCallContext, ParameterState } from "../function";
-import { Realm } from "../realm";
-import { RegisterTable } from "../register-table";
-import { FunctionScope } from "../scope";
-import { AbortSignal, AvmThrowSignal } from "../signal";
-import { AvmStack } from "../stack";
-import { ExecutionContext, FunctionActivation, TargetId, Vm } from "../vm";
+} from "./avm-value";
+import { BaseContext, NatCallContext, RunBudget } from "./context";
+import { ExecutionContext } from "./execution-context";
+import { FlowResult, FlowResultType } from "./flow-result";
+import { AvmCallResult, Callable, CallableType, CallType, ParameterState } from "./function";
+import { Realm } from "./realm";
+import { RegisterTable } from "./register-table";
+import { FunctionScope } from "./scope";
+import { AbortSignal, AvmThrowSignal } from "./signal";
+import { AvmStack } from "./stack";
+import { FunctionActivation, TargetId, Vm } from "./vm";
 
 export enum ToPrimitiveHint {
   Number,
@@ -713,7 +714,8 @@ export abstract class BaseRuntime implements BaseContext {
     args: ReadonlyArray<AvmValue>,
   ): AvmCallResult {
     if (callable.type === CallableType.Host) {
-      return callable.handler(HostCallContext.auto(this, callType, thisArg, args));
+      const runtime: NatCallRuntime = new NatCallRuntime(this.vm, this.budget, callType, thisArg, args);
+      return callable.handler(runtime);
     }
     // assert: callable.type === CallableType.Avm
     const activation: FunctionActivation = new FunctionActivation(callable);
@@ -869,5 +871,28 @@ export abstract class BaseRuntime implements BaseContext {
       // 22. Return false.
       return false;
     }
+  }
+}
+
+export class NatCallRuntime extends BaseRuntime implements NatCallContext {
+  public readonly callType: CallType;
+  public readonly thisArg: AvmObject | AvmUndefined;
+  public readonly args: ReadonlyArray<AvmValue>;
+
+  constructor(
+    vm: Vm,
+    budget: RunBudget,
+    callType: CallType,
+    thisArg: AvmObject | AvmUndefined,
+    args: ReadonlyArray<AvmValue>,
+  ) {
+    super(vm, budget);
+    this.callType = callType;
+    this.thisArg = thisArg;
+    this.args = args;
+  }
+
+  getArg(argIndex: UintSize): AvmValue {
+    return argIndex < this.args.length ? this.args[argIndex] : AVM_UNDEFINED;
   }
 }

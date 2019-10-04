@@ -1,6 +1,6 @@
 import { Uint32, UintSize } from "semantic-types";
 import { AvmBoolean, AvmNumber, AvmObject, AvmSimpleObject, AvmString, AvmUndefined, AvmValue } from "./avm-value";
-import { AvmCallResult, AvmFunctionParameter, ParameterState } from "./function";
+import { AvmCallResult, AvmFunctionParameter, CallType, ParameterState } from "./function";
 import { Realm } from "./realm";
 import { CfgTable } from "./script";
 
@@ -92,7 +92,13 @@ export interface BaseContext {
 }
 
 export interface ThisContext {
-  getThis(): AvmObject | AvmUndefined;
+  readonly thisArg: AvmObject | AvmUndefined;
+}
+
+export interface ArgContext {
+  readonly args: ReadonlyArray<AvmValue>;
+
+  getArg(argIndex: UintSize): AvmValue;
 }
 
 export interface ScopeContext {
@@ -125,9 +131,11 @@ export interface ConstantPoolContext {
   getConstant(index: UintSize): AvmString | AvmUndefined;
 }
 
-export interface BaseCallContext extends BaseContext, ThisContext {
+export interface NatCallContext extends BaseContext, ThisContext, ArgContext {
+  readonly callType: CallType;
 }
 
+// tslint:disable-next-line:max-line-length
 export interface ActionContext extends BaseContext, RegisterContext, ScopeContext, StackContext, ConstantPoolContext, ThisContext {
   createAvmFunction(
     name: string | undefined,

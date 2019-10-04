@@ -3,11 +3,12 @@ import {
   AvmObject,
   AvmPropDescriptor,
   AvmSimpleObject,
-  AvmString,
+  AvmString, AvmUndefined,
   AvmValue,
   AvmValueType,
 } from "../avm-value";
-import { CallableType, HostCallContext } from "../function";
+import { NatCallContext } from "../context";
+import { CallableType } from "../function";
 import { bindingFromHostFunction } from "../realm";
 import { CoreRealm } from "./core";
 
@@ -59,20 +60,22 @@ export function createBooleanRealm(core: CoreRealm): BooleanRealm {
   };
 }
 
-export function boolean(_ctx: HostCallContext): AvmValue {
+export function boolean(_ctx: NatCallContext): AvmValue {
   throw new Error("NotImplemented: Boolean constructor");
 }
 
-export function booleanPrototypeToString(ctx: HostCallContext): AvmString {
-  if (ctx.thisArg.type !== AvmValueType.Object || ctx.thisArg.external || typeof ctx.thisArg.value !== "boolean") {
+export function booleanPrototypeToString(ctx: NatCallContext): AvmString {
+  const thisArg: AvmObject | AvmUndefined = ctx.thisArg;
+  if (thisArg.type !== AvmValueType.Object || thisArg.external || typeof thisArg.value !== "boolean") {
     throw new Error("TypeError: Boolean.prototype.toString() is non-transferable");
   }
-  return AvmValue.fromHostString(ctx.thisArg.value ? "true" : "false");
+  return AvmValue.fromHostString(thisArg.value ? "true" : "false");
 }
 
-export function booleanPrototypeValueOf(ctx: HostCallContext): AvmBoolean {
-  if (ctx.thisArg.type !== AvmValueType.Object || ctx.thisArg.external || typeof ctx.thisArg.value !== "boolean") {
+export function booleanPrototypeValueOf(ctx: NatCallContext): AvmBoolean {
+  const thisArg: AvmObject | AvmUndefined = ctx.thisArg;
+  if (thisArg.type !== AvmValueType.Object || thisArg.external || typeof thisArg.value !== "boolean") {
     throw new Error("TypeError: Boolean.prototype.valueOf() is non-transferable");
   }
-  return AvmValue.fromHostBoolean(ctx.thisArg.value);
+  return AvmValue.fromHostBoolean(thisArg.value);
 }

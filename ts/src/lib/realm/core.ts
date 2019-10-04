@@ -1,5 +1,6 @@
 import { AVM_NULL, AvmObject, AvmPropDescriptor, AvmSimpleObject, AvmValue, AvmValueType } from "../avm-value";
-import { CallableType, CallType, HostCallContext } from "../function";
+import { NatCallContext } from "../context";
+import { CallableType, CallType } from "../function";
 import { bindingFromHostFunction } from "../realm";
 
 /**
@@ -68,7 +69,7 @@ export function createCoreRealm(): CoreRealm {
   };
 }
 
-function objectConstructor(ctx: HostCallContext): AvmValue {
+function objectConstructor(ctx: NatCallContext): AvmValue {
   if (ctx.callType === CallType.Apply) {
     // > 15.2.1 The Object Constructor Called as a Function
     // >
@@ -138,7 +139,7 @@ function objectConstructor(ctx: HostCallContext): AvmValue {
   }
 }
 
-function objectPrototypeToString(ctx: HostCallContext): AvmValue {
+function objectPrototypeToString(ctx: NatCallContext): AvmValue {
   if (ctx.thisArg.type !== AvmValueType.Object) {
     throw new Error("NotImplemented: Object.prototype.toString on non-object");
   }
@@ -152,7 +153,7 @@ function objectPrototypeToString(ctx: HostCallContext): AvmValue {
   return AvmValue.fromHostString(value);
 }
 
-function functionConstructor(ctx: HostCallContext): AvmValue {
+function functionConstructor(ctx: NatCallContext): AvmValue {
   if (ctx.callType === CallType.Apply) {
     // > 15.2.1 The Object Constructor Called as a Function
     // >
@@ -222,6 +223,6 @@ function functionConstructor(ctx: HostCallContext): AvmValue {
   }
 }
 
-function functionPrototypeToString(_ctx: HostCallContext): AvmValue {
+function functionPrototypeToString(_ctx: NatCallContext): AvmValue {
   return AvmValue.fromHostString("[type Function]");
 }

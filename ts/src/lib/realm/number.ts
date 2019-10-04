@@ -10,7 +10,8 @@ import {
   AvmValue,
   AvmValueType,
 } from "../avm-value";
-import { CallableType, HostCallContext } from "../function";
+import { NatCallContext } from "../context";
+import { CallableType } from "../function";
 import { bindingFromHostFunction } from "../realm";
 import { CoreRealm } from "./core";
 
@@ -65,14 +66,14 @@ export function createNumberRealm(core: CoreRealm): NumberRealm {
   };
 }
 
-export function number(_ctx: HostCallContext): AvmValue {
+export function number(_ctx: NatCallContext): AvmValue {
   throw new Error("NotImplemented: Number constructor");
 }
 
-export function numberPrototypeToString(_ctx: HostCallContext): AvmValue {
+export function numberPrototypeToString(_ctx: NatCallContext): AvmValue {
   throw new Error("NotImplemented: Number.prototype.toString()");
 }
 
-export function numberPrototypeValueOf(_ctx: HostCallContext): AvmValue {
+export function numberPrototypeValueOf(_ctx: NatCallContext): AvmValue {
   throw new Error("NotImplemented: Number.protototype.valueOf()");
 }

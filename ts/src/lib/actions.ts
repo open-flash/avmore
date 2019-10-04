@@ -344,7 +344,7 @@ export function getProperty(ctx: ActionContext): void {
   }
   if (target.type === AvmValueType.String && target.value === "") {
     // TODO: Check how to handle this case: `this`, `target`, `variable`?
-    ctx.push(ctx.getStringMember(ctx.getThis(), key));
+    ctx.push(ctx.getStringMember(ctx.thisArg, key));
   } else {
     ctx.push(ctx.getStringMember(target, key));
   }

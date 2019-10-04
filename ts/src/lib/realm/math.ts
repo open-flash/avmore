@@ -1,5 +1,5 @@
 import { AvmObject, AvmPropDescriptor, AvmSimpleObject, AvmValue, AvmValueType } from "../avm-value";
-import { HostCallContext } from "../function";
+import { NatCallContext } from "../context";
 import { bindingFromHostFunction } from "../realm";
 import { CoreRealm } from "./core";
 
@@ -114,95 +114,95 @@ export function createMathRealm(core: CoreRealm): MathRealm {
   };
 }
 
-export function mathAbs(ctx: HostCallContext): AvmValue {
+export function mathAbs(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.abs(x));
 }
 
-export function mathAcos(ctx: HostCallContext): AvmValue {
+export function mathAcos(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.acos(x));
 }
 
-export function mathAsin(ctx: HostCallContext): AvmValue {
+export function mathAsin(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.asin(x));
 }
 
-export function mathAtan(ctx: HostCallContext): AvmValue {
+export function mathAtan(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.atan(x));
 }
 
-export function mathAtan2(ctx: HostCallContext): AvmValue {
+export function mathAtan2(ctx: NatCallContext): AvmValue {
   const y: number = ctx.toHostNumber(ctx.getArg(0));
   const x: number = ctx.toHostNumber(ctx.getArg(1));
   return AvmValue.fromHostNumber(Math.atan2(y, x));
 }
 
-export function mathCeil(ctx: HostCallContext): AvmValue {
+export function mathCeil(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.ceil(x));
 }
 
-export function mathCos(ctx: HostCallContext): AvmValue {
+export function mathCos(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.cos(x));
 }
 
-export function mathExp(ctx: HostCallContext): AvmValue {
+export function mathExp(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.exp(x));
 }
 
-export function mathFloor(ctx: HostCallContext): AvmValue {
+export function mathFloor(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.floor(x));
 }
 
-export function mathLog(ctx: HostCallContext): AvmValue {
+export function mathLog(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.log(x));
 }
 
-export function mathMax(ctx: HostCallContext): AvmValue {
+export function mathMax(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   const y: number = ctx.toHostNumber(ctx.getArg(1));
   return AvmValue.fromHostNumber(Math.max(x, y));
 }
 
-export function mathMin(ctx: HostCallContext): AvmValue {
+export function mathMin(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   const y: number = ctx.toHostNumber(ctx.getArg(1));
   return AvmValue.fromHostNumber(Math.min(x, y));
 }
 
-export function mathPow(ctx: HostCallContext): AvmValue {
+export function mathPow(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   const y: number = ctx.toHostNumber(ctx.getArg(1));
   return AvmValue.fromHostNumber(Math.pow(x, y));
 }
 
-export function mathRandom(_ctx: HostCallContext): AvmValue {
+export function mathRandom(_ctx: NatCallContext): AvmValue {
   throw new Error("NotImplemented: Math.random");
 }
 
-export function mathRound(ctx: HostCallContext): AvmValue {
+export function mathRound(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.round(x));
 }
 
-export function mathSin(ctx: HostCallContext): AvmValue {
+export function mathSin(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.sin(x));
 }
 
-export function mathSqrt(ctx: HostCallContext): AvmValue {
+export function mathSqrt(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.sqrt(x));
 }
 
-export function mathTan(ctx: HostCallContext): AvmValue {
+export function mathTan(ctx: NatCallContext): AvmValue {
   const x: number = ctx.toHostNumber(ctx.getArg(0));
   return AvmValue.fromHostNumber(Math.tan(x));
 }

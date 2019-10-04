@@ -1,6 +1,7 @@
 import { Uint32 } from "semantic-types";
 import { AVM_UNDEFINED, AvmObject, AvmPropDescriptor, AvmValue, AvmValueType } from "./avm-value";
-import { AvmCallResult, CallableType, HostCallContext, HostCallHandler } from "./function";
+import { NatCallContext } from "./context";
+import { AvmCallResult, CallableType, NatCallHandler } from "./function";
 import { ArrayRealm, createArrayRealm } from "./realm/array";
 import { BooleanRealm, createBooleanRealm } from "./realm/boolean";
 import { CoreRealm, createCoreRealm } from "./realm/core";
@@ -45,7 +46,7 @@ export function createRealm(): Realm {
   };
 }
 
-export function bindingFromHostFunction(funcProto: AvmObject, handler: HostCallHandler): AvmObject {
+export function bindingFromHostFunction(funcProto: AvmObject, handler: NatCallHandler): AvmObject {
   return {
     type: AvmValueType.Object,
     external: false,
@@ -72,7 +73,7 @@ function asSetNativeHandler(): AvmCallResult {
 }
 
 // ASSetPropFlags
-function asSetPropFlagsHandler(ctx: HostCallContext): AvmCallResult {
+function asSetPropFlagsHandler(ctx: NatCallContext): AvmCallResult {
   const target: AvmValue = ctx.getArg(0);
   const avmProperties: AvmValue = ctx.getArg(1);
   const setMask: Uint32 = ctx.toHostUint32(ctx.getArg(2));

@@ -8,7 +8,8 @@ import {
   AvmValue,
   AvmValueType,
 } from "../avm-value";
-import { AvmCallResult, CallableType, CallType, HostCallContext } from "../function";
+import { NatCallContext } from "../context";
+import { AvmCallResult, CallableType, CallType } from "../function";
 import { bindingFromHostFunction } from "../realm";
 import { CoreRealm } from "./core";
 
@@ -110,7 +111,7 @@ export function createArrayRealm(core: CoreRealm): ArrayRealm {
   };
 }
 
-export function array(ctx: HostCallContext): AvmCallResult {
+export function array(ctx: NatCallContext): AvmCallResult {
   // > 15.4.1 The Array Constructor Called as a Function
   // >
   // > When `Array` is called as a function rather than as a constructor, it creates and
@@ -130,6 +131,10 @@ export function array(ctx: HostCallContext): AvmCallResult {
   // >
   // > When `Array` is called as part of a new expression, it is a constructor: it initialises the
   // > newly created object.
+
+  if (ctx.thisArg.type !== AvmValueType.Object) {
+    throw new Error("TypeError: NonObjectThis");
+  }
 
   // assert: callType === CallType.Construct
 
@@ -205,16 +210,16 @@ export function array(ctx: HostCallContext): AvmCallResult {
 // > The `toString` function is not generic; it throws a `TypeError` exception if its this value
 // > is not an Array object. Therefore, it cannot be transferred to other kinds of objects for use
 // > as a method.
-export function arrayPrototypeToString(ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypeToString(ctx: NatCallContext): AvmCallResult {
   // TODO: Check that `thisArg` is an array
-  return ctx.apply(ctx.getRealm().arrayPrototypeJoin, ctx.getThis(), []);
+  return ctx.apply(ctx.getRealm().arrayPrototypeJoin, ctx.thisArg, []);
 }
 
-export function arrayPrototypeToLocaleString(_ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypeToLocaleString(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: Array.prototype.toLocaleString");
 }
 
-export function arrayPrototypeConcat(_ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypeConcat(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: Array.prototype.concat");
 }
 
@@ -224,7 +229,7 @@ export function arrayPrototypeConcat(_ctx: HostCallContext): AvmCallResult {
 // > separated by occurrences of the _separator_. If no separator is provided, a single comma is
 // > used as the separator.
 // > The `join` method takes one argument, _separator_, and performs the following steps:
-export function arrayPrototypeJoin(ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypeJoin(ctx: NatCallContext): AvmCallResult {
   // > 1. Call the [[Get]] method of this object with argument `"length"`.
   // > 2. Call ToUint32(Result(1)).
   const len: Uint32 = ctx.toHostUint32(ctx.getStringMember(ctx.thisArg, "length"));
@@ -271,34 +276,34 @@ export function arrayPrototypeJoin(ctx: HostCallContext): AvmCallResult {
   // > implementation-dependent.
 }
 
-export function arrayPrototypePop(_ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypePop(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: Array.prototype.pop");
 }
 
-export function arrayPrototypePush(_ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypePush(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: Array.prototype.push");
 }
 
-export function arrayPrototypeReverse(_ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypeReverse(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: Array.prototype.reverse");
 }
 
-export function arrayPrototypeShift(_ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypeShift(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: Array.prototype.shift");
 }
 
-export function arrayPrototypeSlice(_ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypeSlice(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: Array.prototype.slice");
 }
 
-export function arrayPrototypeSort(_ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypeSort(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: Array.prototype.sort");
 }
 
-export function arrayPrototypeSplice(_ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypeSplice(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: Array.prototype.splice");
 }
 
-export function arrayPrototypeUnshift(_ctx: HostCallContext): AvmCallResult {
+export function arrayPrototypeUnshift(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: Array.prototype.unshift");
 }

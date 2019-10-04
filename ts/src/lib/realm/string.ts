@@ -1,5 +1,6 @@
 import { AVM_EMPTY_STRING, AvmObject, AvmPropDescriptor, AvmSimpleObject, AvmValueType } from "../avm-value";
-import { AvmCallResult, CallableType, CallType, HostCallContext } from "../function";
+import { NatCallContext } from "../context";
+import { AvmCallResult, CallableType, CallType } from "../function";
 import { bindingFromHostFunction } from "../realm";
 import { CoreRealm } from "./core";
 
@@ -102,7 +103,7 @@ export function createStringRealm(core: CoreRealm): StringRealm {
   };
 }
 
-export function string(ctx: HostCallContext): AvmCallResult {
+export function string(ctx: NatCallContext): AvmCallResult {
   // > 15.5.1 The String Constructor Called as a Function
   // >
   // > When `String` is called as a function rather than as a constructor, it performs a type
@@ -116,6 +117,10 @@ export function string(ctx: HostCallContext): AvmCallResult {
     return ctx.args.length > 0
       ? ctx.toAvmString(ctx.args[0])
       : AVM_EMPTY_STRING;
+  }
+
+  if (ctx.thisArg.type !== AvmValueType.Object) {
+    throw new Error("TypeError: NonObjectThis");
   }
 
   // assert: callType === CallType.Construct
@@ -149,58 +154,58 @@ export function string(ctx: HostCallContext): AvmCallResult {
   return ctx.thisArg;
 }
 
-export function stringFromCharCode(_ctx: HostCallContext): AvmCallResult {
+export function stringFromCharCode(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.fromCharCode");
 }
 
-export function stringPrototypeToString(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeToString(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.toString");
 }
 
-export function stringPrototypeValueOf(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeValueOf(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.valueOf");
 }
 
-export function stringPrototypeCharAt(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeCharAt(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.charAt");
 }
 
-export function stringPrototypeCharCodeAt(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeCharCodeAt(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.charCodeAt");
 }
 
-export function stringPrototypeConcat(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeConcat(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.concat");
 }
 
-export function stringPrototypeIndexOf(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeIndexOf(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.indexOf");
 }
 
-export function stringPrototypeLastIndexOf(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeLastIndexOf(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.lastIndexOf");
 }
 
-export function stringPrototypeSlice(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeSlice(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.slice");
 }
 
-export function stringPrototypeSplit(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeSplit(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.split");
 }
 
-export function stringPrototypeSubstr(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeSubstr(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.substr");
 }
 
-export function stringPrototypeSubstring(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeSubstring(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.substring");
 }
 
-export function stringPrototypeToLowerCase(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeToLowerCase(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.toLowerCase");
 }
 
-export function stringPrototypeToUpperCase(_ctx: HostCallContext): AvmCallResult {
+export function stringPrototypeToUpperCase(_ctx: NatCallContext): AvmCallResult {
   throw new Error("NotImplemented: String.prototype.toUpperCase");
 }

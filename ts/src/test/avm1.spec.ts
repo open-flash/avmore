@@ -9,7 +9,7 @@ import {
   AvmSimpleObject,
   AvmValue,
 } from "../lib/avm-value";
-import { HostCallContext } from "../lib/function";
+import { NatCallContext } from "../lib/context";
 import { LoggedHost } from "../lib/host";
 import { bindingFromHostFunction } from "../lib/realm";
 import { TargetId, Vm } from "../lib/vm";
@@ -91,7 +91,7 @@ describe("avm1", function () {
       globalObject.ownProperties.set("_totalframes", AvmPropDescriptor.data(AvmValue.fromHostNumber(2)));
       globalObject.ownProperties.set("print", AvmPropDescriptor.data(bindingFromHostFunction(
         vm.realm.functionPrototype,
-        (ctx: HostCallContext): AvmValue => {
+        (ctx: NatCallContext): AvmValue => {
           host.trace(ctx.toHostString(ctx.getArg(0)));
           return AVM_UNDEFINED;
         },
