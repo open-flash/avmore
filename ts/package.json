@@ -50,7 +50,7 @@
     "chai": "^4.2.0",
     "gulp": "^4.0.2",
     "gulp-cli": "^2.2.0",
-    "minimist": "^1.2.0",
+    "minimist": "^1.2.3",
     "swf-parser": "^0.8.0",
     "ts-node": "^8.4.1",
     "tslint": "^5.20.0",
